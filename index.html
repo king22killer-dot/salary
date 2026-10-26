@@ -77,6 +77,8 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 .de .g label{margin:4px 0 2px;font-size:12px}
 .seg{display:flex;gap:6px}.seg button{flex:1;background:#e2e8f0;color:#0f172a}.seg button.on{background:#0f172a;color:white;font-weight:700}
 .step{display:flex;align-items:center;gap:8px}.step button{width:44px;background:#e2e8f0;font-size:20px;padding:0}.step b{min-width:28px;text-align:center;font-size:17px}
+.ask{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88vw,360px);background:white;border-radius:16px;padding:16px;z-index:71;display:none;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.ask.show{display:block}.ask p{margin:0 0 14px;font-size:16px;line-height:1.5;white-space:pre-wrap}.ask textarea{width:100%;min-height:120px;font-size:14px;margin-bottom:12px}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#0f172a;color:white;padding:9px 16px;border-radius:999px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .help li{margin:4px 0}
@@ -99,6 +101,8 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 <div class="mask" id="mask"></div>
 <div class="sheet" id="sheet"></div>
 <div class="toast" id="toast"></div>
+<div class="mask" id="askMask" style="z-index:70"></div>
+<div class="ask" id="ask"></div>
 <script>
 const APP_VER='v2（2026-10-26）';
 const KEY='salaryBoss.v1';
@@ -148,6 +152,18 @@ function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');
 function openSheet(html){$('sheet').innerHTML=html;$('mask').classList.add('show');$('sheet').classList.add('show');$('sheet').scrollTop=0;}
 function closeSheet(){$('mask').classList.remove('show');$('sheet').classList.remove('show');}
 $('mask').onclick=closeSheet;
+// 確認框：ask('訊息',{ok:'刪除',danger:true}).then(ok=>…)；{text} 顯示可複製的文字
+function ask(msg,o={}){
+  return new Promise(res=>{
+    const el=$('ask'),m=$('askMask');
+    el.innerHTML=`<p>${esc(msg)}</p>${o.text!==undefined?`<textarea id="askText" readonly>${esc(o.text)}</textarea>`:''}<div class="row">${o.alert?'':'<button class="secondary grow" data-a="0">取消</button>'}<button class="${o.danger?'danger':'primary'} grow" data-a="1">${esc(o.ok||'確定')}</button></div>`;
+    el.classList.add('show');m.classList.add('show');
+    if($('askText'))$('askText').select();
+    const done=v=>{el.classList.remove('show');m.classList.remove('show');res(v);};
+    el.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>done(b.dataset.a==='1'));
+    m.onclick=()=>done(false);
+  });
+}
 
 const activeEmps=()=>DB.employees.filter(e=>e.active!==false);
 const empById=id=>DB.employees.find(e=>e.id===id);
@@ -256,9 +272,10 @@ function fillWeekdays(){
   save();render();toast(`已記 ${c} 天，每天 1 工`);
 }
 function clearMonth(){
-  const e=empById(S.emp);if(!confirm(`清空 ${e.name} 在 ${S.y}年${S.m+1}月 的所有紀錄？`))return;
-  for(let d=1;d<=daysIn(S.y,S.m);d++)setRec(dkey(S.y,S.m,d),S.emp,null);
-  save();render();toast('已清空');
+  const e=empById(S.emp);
+  ask(`清空 ${e.name} 在 ${S.y}年${S.m+1}月 的所有紀錄？`,{ok:'清空',danger:true}).then(ok=>{if(!ok)return;
+    for(let d=1;d<=daysIn(S.y,S.m);d++)setRec(dkey(S.y,S.m,d),S.emp,null);
+    save();render();toast('已清空');});
 }
 function dayEditor(d){
   const key=dkey(S.y,S.m,d),day=DB.records[key]||{};
@@ -313,7 +330,7 @@ function renderStat(){
   $('csv').onclick=()=>exportCSV(rs);
   $('cp').onclick=()=>{
     const t=`${S.y}年${S.m+1}月 薪資統計\n`+rs.map(({e,r})=>`${e.name}：出勤${r.days}天、共${fu(r.units)}工（加班${fu(r.ot)}工）、實發 ${fmt(r.total)} 元`).join('\n')+`\n合計：${fmt(tot)} 元`;
-    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('已複製'),()=>{prompt('請手動複製：',t);});
+    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('已複製'),()=>ask('請長按下面的文字複製：',{text:t,alert:true,ok:'關閉'}));
   };
 }
 function download(name,text,type){
@@ -355,11 +372,11 @@ function editEmp(id){
     save();closeSheet();render();toast('已儲存');
   };
   if(id)$('eDel').onclick=()=>{
-    if(!confirm(`刪除「${e.name}」以及他所有的紀錄？（只是離職的話，取消「在職」即可）`))return;
-    DB.employees=DB.employees.filter(x=>x.id!==id);
-    Object.keys(DB.records).forEach(k=>{delete DB.records[k][id];if(!Object.keys(DB.records[k]).length)delete DB.records[k];});
-    if(S.emp===id)S.emp='all';
-    save();closeSheet();render();toast('已刪除');
+    ask(`刪除「${e.name}」以及他所有的紀錄？（只是離職的話，取消「在職」即可）`,{ok:'刪除',danger:true}).then(ok=>{if(!ok)return;
+      DB.employees=DB.employees.filter(x=>x.id!==id);
+      Object.keys(DB.records).forEach(k=>{delete DB.records[k][id];if(!Object.keys(DB.records[k]).length)delete DB.records[k];});
+      if(S.emp===id)S.emp='all';
+      save();closeSheet();render();toast('已刪除');});
   };
 }
 
@@ -375,11 +392,11 @@ function renderSet(){
   $('bkFile').onchange=ev=>{
     const f=ev.target.files[0];if(!f)return;const rd=new FileReader();
     rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!d||!Array.isArray(d.employees))throw 0;
-      if(!confirm('匯入會取代目前所有資料，確定？'))return;
-      DB=migrate(d);save();render();toast('已匯入');}catch(e){alert('檔案格式不正確');}};
+      ask('匯入會取代目前所有資料，確定？',{ok:'匯入',danger:true}).then(ok=>{if(!ok)return;DB=migrate(d);save();render();toast('已匯入');});
+    }catch(e){ask('檔案格式不正確，請選「⬇️ 匯出備份」存下來的 .json 檔。',{alert:true});}ev.target.value='';};
     rd.readAsText(f);
   };
-  $('wipe').onclick=()=>{if(confirm('確定清除所有員工與紀錄？')&&confirm('真的要清除嗎？無法復原。')){DB=defaults();save();S.emp='all';render();toast('已清除');}};
+  $('wipe').onclick=()=>ask('確定清除所有員工與紀錄？無法復原。',{ok:'全部清除',danger:true}).then(ok=>{if(ok){DB=defaults();save();S.emp='all';render();toast('已清除');}});
 }
 function helpCard(){
   return `<div class="card help"><b>📖 使用說明</b><ol style="padding-left:20px;margin:6px 0 0;font-size:14px">
