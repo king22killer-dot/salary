@@ -75,6 +75,11 @@ nav.tabs button.on::after{content:"";position:absolute;bottom:2px;width:44px;hei
 .dots i{width:9px;height:9px;border-radius:50%;display:block}
 .cnt{font-size:11px;color:#475569;font-weight:600}
 /* 工程色帶（施工日連成一條，沒施工的日子斷開） */
+.togs{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.tog{min-height:34px;padding:4px 12px 4px 10px;border-radius:999px;font-size:14px;background:#f4f7fd;color:var(--muted);border:1.5px solid var(--line)}
+.tog::before{content:"";display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px solid #b6c2d6;margin-right:6px;vertical-align:-2px;background:white}
+.tog.on{background:var(--sky);color:var(--navy);border-color:#bcd0f7}
+.tog.on::before{background:var(--blue) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-6.5' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat;border-color:var(--blue)}
 .bands{align-self:stretch;margin:auto -5.5px 0;display:flex;flex-direction:column;gap:3px;padding-top:3px}
 .band{height:16px;font-size:10.5px;line-height:16px;color:white;white-space:nowrap;overflow:visible;font-weight:700}
 .band.s{margin-left:5.5px;border-radius:8px 0 0 8px}.band.e{margin-right:5.5px;border-radius:0 8px 8px 0}.band.s.e{border-radius:8px;text-align:center}
@@ -138,7 +143,7 @@ details summary{cursor:pointer;color:var(--blue);font-size:13px;margin-top:8px;f
 <div class="mask" id="askMask" style="z-index:70"></div>
 <div class="ask" id="ask"></div>
 <script>
-const APP_VER='v11（2026-10-26）';
+const APP_VER='v12（2026-10-26）';
 const KEY='salaryBoss.v1';
 const OT_UNIT=0.5; // 加班一次＝0.5 工
 const COLORS=['#2563eb','#7c3aed','#db2777','#0891b2','#ea580c','#65a30d','#0f766e','#9333ea'];
@@ -295,7 +300,9 @@ function renderCal(){
     BRUSHES.forEach(k=>h+=`<button class="brush ${S.brush===k.id?'on':''}" style="background:${k.color}" data-brush="${k.id}">${k.name}</button>`);
     h+=`</div><div class="row" style="margin-top:8px"><button class="secondary grow" id="fillWk">平日空白日全記 1 工</button><button class="danger" id="clrM">清空本月</button></div>`;
   }else h+=`<div class="hint"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c8aa5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>點日期可一次記所有員工當天的工數與加班。選上方員工可用按鈕快速記工。</span></div>`;
-  h+='</div><div class="card"><div class="cal">';
+  // 顯示開關：記工標記、工程色帶（存在 settings，下次打開照舊）
+  const showW=DB.settings.showWork!==false,showB=DB.settings.showBands!==false;
+  h+=`</div><div class="card"><div class="togs"><span class="small">顯示</span><button type="button" class="tog${showW?' on':''}" data-tog="showWork" aria-pressed="${showW}">記工</button><button type="button" class="tog${showB?' on':''}" data-tog="showBands" aria-pressed="${showB}">工程色帶</button></div><div class="cal">`;
   ['日','一','二','三','四','五','六'].forEach((w,i)=>h+=`<div class="wd ${i===0?'sun':i===6?'sat':''}">${w}</div>`);
   const first=new Date(S.y,S.m,1).getDay(),n=daysIn(S.y,S.m),tk=dkey(now.getFullYear(),now.getMonth(),now.getDate());
   const lanes=monthLanes(dkey(S.y,S.m,1),dkey(S.y,S.m,n));
@@ -314,15 +321,16 @@ function renderCal(){
       const pj=rec&&projById(rec.p);if(pj)inner+=`<div class="pj" style="color:${pj.color}">${esc(pj.name.slice(0,3))}</div>`;
       if(rec&&(num(rec.add)||num(rec.sub)||rec.note))inner+=`<div class="cnt">•</div>`;
     }
-    h+=`<div class="d ${wd===0?'sun':wd===6?'sat':''} ${key===tk?'today':''}" data-day="${d}"><div class="n">${d}</div>${inner}${bandsHtml(lanes,key,wd===0||d===1)}</div>`;
+    h+=`<div class="d ${wd===0?'sun':wd===6?'sat':''} ${key===tk?'today':''}" data-day="${d}"><div class="n">${d}</div>${showW?inner:''}${showB?bandsHtml(lanes,key,wd===0||d===1):''}</div>`;
   }
-  h+='</div></div>'+monthProjCard(lanes);
+  h+='</div></div>'+(showB?monthProjCard(lanes):'');
   if(S.emp!=='all'){
     const e=empById(S.emp),p=period(S.y,S.m),r=calc(e,p.from,p.to);
     h+=`<div class="card"><div class="kpi"><div><b>${r.days}</b><small>出勤天數</small></div><div><b>${fu(r.units)}</b><small>總工數</small></div><div><b>${fmt(r.total)}</b><small>本期薪資</small></div></div><div class="small" style="margin-top:6px;text-align:center">薪資期間 ${ymd(p.from)}～${ymd(p.to)}</div></div>`;
   }
   $('view').innerHTML=h;
   bindModeBar();
+  document.querySelectorAll('[data-tog]').forEach(b=>b.onclick=()=>{const k=b.dataset.tog;DB.settings[k]=DB.settings[k]===false;save();render();});
   document.querySelectorAll('[data-emp]').forEach(b=>b.onclick=()=>{S.emp=b.dataset.emp;render();});
   document.querySelectorAll('[data-brush]').forEach(b=>b.onclick=()=>{S.brush=b.dataset.brush;render();});
   document.querySelectorAll('.cal .d[data-day]').forEach(c=>c.onclick=()=>tapDay(+c.dataset.day));
@@ -815,6 +823,7 @@ function renderSet(){
 function helpCard(){
   return `<div class="card help"><b>📖 使用說明</b><ol style="padding-left:20px;margin:6px 0 0;font-size:14px">
   <li>到「👥 員工」新增員工，填<b>起薪（日薪）</b>。之後加薪：編輯員工 →「📈 調薪紀錄」填生效日和新日薪，舊的工數照舊日薪算。</li>
+  <li><b>顯示開關</b>：「📅 記工」月曆上方的「記工」「工程色帶」按鈕可以開關要不要顯示，關掉只是不顯示，資料不會刪掉。</li>
   <li><b>工程安排</b>：「📅 班表」上面切到「🏗️ 工程安排」，先按「管理工程」新增工程（名稱、地點），再到每個工程按「👷 安排人員」。上方 ‹ › 或「今天／明天」換日期，「照前一天安排」一鍵帶入，「💬 LINE 傳派工單」傳到群組。新增工程時設定<b>施工日期</b>：每天都做選「連續施工」填起訖日；隔一天或隔好幾天才去做，選「<b>指定施工日</b>」在小月曆點選日期。「📅 記工」月曆會用<b>色帶</b>標出施工日（沒施工的日子會斷開），工程安排只列出當天要施工的工程；臨時要去，按「📌 這天也要施工」。只安排不算薪資，勾「同時記 1 工」才會記工。統計頁會列出每個工程用了多少工和人工成本。</li>
   <li>到「📅 班表」的「📅 記工」選一位員工，點「<b>1 工</b>」或「<b>0.5 工</b>」，再點日期就記好；再點一次同一個會取消。</li>
   <li>有加班：點「<b>＋加班 0.5 工</b>」再點日期。一天加班不只一次，用「✏️ 詳細」調整次數。</li>
