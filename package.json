@@ -1,0 +1,11 @@
+{
+  "name": "salary",
+  "private": true,
+  "description": "薪資出勤 PWA。樣式用 Tailwind：改 src/input.css 或 index.html 的 class 之後執行 npm run build:css 產生 app.css",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i src/input.css -o app.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

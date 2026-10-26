@@ -1,10 +1,12 @@
 # 薪資出勤（老闆用排班＋薪資統計 PWA）
 
-iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHub Pages（推上 main 就自動部署，網址 https://king22killer-dot.github.io/salary/）。改動請先放在開發分支，累積好再一次推上 main。
+iPhone 用的網頁 App。純靜態網站（只有樣式要用 Tailwind 編譯一次），部署在 GitHub Pages（推上 main 就自動部署，網址 https://king22killer-dot.github.io/salary/）。改動請先放在開發分支，累積好再一次推上 main。
 
 ## 檔案
-- `index.html`：整個 App（HTML＋CSS＋JS 都在這個檔）。
-- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v16`）。
+- `index.html`：整個 App（HTML＋JS；樣式在 `app.css`）。
+- `src/input.css`＋`tailwind.config.js`：樣式原始檔（Tailwind CSS 3.4，主題色 `brand`＝深邃藍）。改樣式或在 index.html 加新的 Tailwind class 後，要跑 `npm install`（第一次）和 `npm run build:css` 重新產生 `app.css`，**app.css 要一起 commit**（GitHub Pages 不會幫忙編譯）。
+- `app.css`：編譯好的樣式，Service Worker 會快取，離線也能用（不要改用 Tailwind CDN）。
+- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v17`）。
 - `manifest.json`、`icon-*.png`：加入主畫面用。
 - `.nojekyll`：讓 GitHub Pages 直接發布檔案（不要刪）。
 
@@ -12,6 +14,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 1. 改 `index.html` 裡的 `const APP_VER='vN（YYYY-MM-DD）';`，版本號加 1。
 2. `sw.js` 的 `CACHE` 改成同一個版本號（`salary-vN`）。
 3. 有新功能或操作改變時，更新 `index.html` 裡 `helpCard()` 的使用說明。
+3-1. 有動到樣式或 class 就跑 `npm run build:css`。
 4. 用 Playwright（iPhone 13 模擬）開頁面測試，確認沒有 JS 錯誤再 commit。
 5. commit 訊息用中文簡述改了什麼。
 
@@ -33,6 +36,12 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 - 記工／工程安排是大顆分段按鈕（`.seg.modebar`），員工是膠囊按鈕（`.chip`），選中＝深藍。
 - 月曆格白底細框圓角，今天＝橘框＋米色底；記工／工程安排與下方分頁列都用線條 SVG 圖示（不用 emoji），選中＝藍色＋底線。
 - 工程預設顏色用參考圖色系 `PROJ_COLORS`（桃紅、藍綠、藍、紫…）。
+
+## UI 視覺規範（v16，使用者指定）
+- HTML＋Tailwind CSS；現代極簡、乾淨、有留白；柔和淺色＋主題色深邃藍（`brand-600～950`），背景與卡片有層次。
+- 卡片、輸入框用 `rounded-xl`＋細緻陰影（`shadow-md`／`shadow-sm`）；按鈕有顏色漸變（hover）與按下縮放（`active:scale`）；輸入框 focus 有藍色光圈（`ring-4 ring-brand-500/15`）。
+- 圖示一律用 Lucide 線條圖示（JS 裡的 `IC`／`ic()` 內嵌 SVG，`.ic` 跟文字對齊），不要用 emoji。
+- 月曆卡片（`.calcard`）左右留白比較小，格子才夠寬放色帶與人員；改月曆內距要一起檢查 `.bands` 的 5.5px 負邊距。
 
 ## 使用者偏好
 - 介面與說明一律繁體中文。

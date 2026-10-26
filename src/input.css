@@ -1,0 +1,173 @@
+/* 薪資出勤：樣式原始檔（Tailwind）。改完跑 npm run build:css → 產生 app.css（App 實際載入的檔） */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== 色彩變數：JS 產生的畫面也會用到（var(--navy) 等），名稱不要改 ===== */
+@layer base {
+  :root {
+    --navy: theme('colors.brand.900'); --blue: theme('colors.brand.600'); --sky: theme('colors.brand.50');
+    --bg: #f1f4f9; --card: #ffffff; --line: theme('colors.slate.200'); --ink: theme('colors.ink');
+    --muted: theme('colors.slate.500'); --soft: theme('colors.slate.100');
+    --red: theme('colors.red.600'); --sat: theme('colors.brand.600');
+    --today: theme('colors.amber.500'); --today-bg: theme('colors.amber.50');
+    --shadow: theme('boxShadow.md'); --shadow-sm: theme('boxShadow.sm');
+    -webkit-tap-highlight-color: transparent;
+  }
+  body { @apply bg-[var(--bg)] font-sans text-ink antialiased; }
+  b, strong { @apply font-semibold; }
+  label { @apply mb-1.5 mt-3.5 block text-[13px] font-medium text-slate-600; }
+  input, select, textarea {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base text-ink shadow-sm
+      transition duration-200 placeholder:text-slate-400
+      focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15;
+  }
+  select { @apply appearance-none bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right .8rem center; background-size: 1.1rem; }
+  input[type=color] { @apply h-11 cursor-pointer p-1; }
+  input[type=checkbox] { @apply mr-2 h-5 w-5 cursor-pointer rounded-md p-0 align-[-5px] shadow-none accent-brand-600 focus:ring-2; }
+  textarea { @apply leading-relaxed; }
+  button { @apply min-h-[44px] cursor-pointer select-none rounded-xl px-4 py-2.5 text-[15px] font-semibold
+    transition duration-200 ease-out active:scale-[.97] disabled:opacity-50; }
+  button:focus-visible, a:focus-visible { @apply outline-none ring-4 ring-brand-500/30; }
+  details summary { @apply mt-2.5 cursor-pointer text-[13px] font-semibold text-brand-600; }
+  /* Lucide 圖示：跟文字對齊 */
+  .ic { @apply inline-block h-[1.15em] w-[1.15em] shrink-0 align-[-0.2em]; }
+}
+
+@layer components {
+  /* ===== 版面 ===== */
+  header { @apply sticky top-0 z-10 px-4 pb-4 text-white shadow-lg shadow-brand-900/20;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    background: linear-gradient(135deg, theme('colors.brand.950') 0%, theme('colors.brand.800') 55%, theme('colors.brand.600') 100%); }
+  header .top { @apply mx-auto flex max-w-3xl items-center gap-2; }
+  header h1 { @apply m-0 flex flex-1 items-center gap-2.5 whitespace-nowrap text-xl font-bold tracking-wide; }
+  header h1 .logo { @apply grid h-9 w-9 place-items-center rounded-xl bg-white/15 ring-1 ring-white/25; }
+  .mnav { @apply flex items-center gap-1.5; }
+  .mnav button { @apply grid h-10 min-h-0 w-10 place-items-center rounded-xl bg-white/10 p-0 text-white ring-1 ring-white/20 hover:bg-white/20; }
+  .mnav b { @apply min-w-[104px] text-center text-base font-semibold tabular-nums tracking-wide; }
+  main { @apply mx-auto max-w-3xl px-4 pt-4; padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .card { @apply mb-4 rounded-xl border border-slate-200/70 bg-white p-5 shadow-md shadow-slate-900/[.04]; }
+  .row { @apply flex flex-wrap items-center gap-2.5; }
+  .grow { @apply min-w-0 flex-1; }
+  .small { @apply text-xs font-normal leading-relaxed text-slate-500; }
+  .empty { @apply px-2 py-8 text-center text-slate-500; }
+  .hint { @apply mt-3 flex items-start gap-2 text-[13px] leading-relaxed text-slate-500; }
+  .hint svg { @apply mt-0.5 shrink-0; }
+
+  /* ===== 按鈕 ===== */
+  .primary { @apply bg-gradient-to-br from-brand-800 to-brand-600 text-white shadow-md shadow-brand-700/25 hover:shadow-lg hover:brightness-110; }
+  .secondary { @apply bg-slate-100 text-brand-900 hover:bg-brand-50 hover:text-brand-700; }
+  .danger { @apply bg-red-50 text-red-700 hover:bg-red-100; }
+  .line { @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#06c755] px-4 py-2.5 text-[15px] font-semibold text-white no-underline shadow-md shadow-green-600/25 transition duration-200 hover:brightness-105 active:scale-[.97]; }
+  .primary, .secondary, .danger, .line { @apply inline-flex items-center justify-center gap-2; }
+
+  /* ===== 下方分頁列 ===== */
+  nav.tabs { @apply fixed inset-x-0 bottom-0 z-20 flex rounded-t-2xl border-t border-slate-200/80 bg-white/95 shadow-[0_-4px_20px_rgba(15,31,61,.06)] backdrop-blur;
+    padding-bottom: env(safe-area-inset-bottom); }
+  nav.tabs button { @apply relative flex min-h-[62px] flex-1 flex-col items-center gap-1 rounded-none bg-transparent px-0 pb-1.5 pt-2 text-xs font-medium text-slate-400 hover:text-brand-600 active:scale-95; }
+  nav.tabs button svg { @apply h-6 w-6; }
+  nav.tabs button.on { @apply text-brand-600; }
+  nav.tabs button.on::after { content: ""; @apply absolute bottom-0.5 h-[3px] w-11 rounded-full bg-brand-600; }
+
+  /* ===== 分段切換、員工按鈕 ===== */
+  .seg { @apply flex gap-1.5; }
+  .seg button { @apply flex-1 whitespace-nowrap bg-slate-100 text-brand-900 hover:bg-brand-50; }
+  .seg button.on { @apply bg-gradient-to-br from-brand-800 to-brand-600 font-bold text-white shadow-md shadow-brand-700/25; }
+  .seg.modebar { @apply mb-4 rounded-2xl border border-slate-200/70 bg-white p-1.5 shadow-md shadow-slate-900/[.04]; }
+  .seg.modebar button { @apply flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-transparent text-[17px] hover:bg-slate-50; }
+  .seg.modebar button svg { @apply h-6 w-6 shrink-0; }
+  .chips { @apply flex gap-2 overflow-x-auto pb-1; -webkit-overflow-scrolling: touch; }
+  .chip { @apply inline-flex min-h-[40px] flex-none items-center rounded-full bg-slate-100 px-4 py-1.5 text-[15px] font-semibold text-ink hover:bg-brand-50; }
+  .chip.on { @apply bg-brand-900 text-white shadow-md shadow-brand-900/25 hover:bg-brand-800; }
+  .brush { @apply inline-flex min-h-[42px] flex-none items-center gap-1.5 rounded-xl border-[3px] border-transparent px-3 py-1.5 text-sm text-white shadow-sm hover:brightness-110; }
+  .brush.on { @apply border-ink shadow-[inset_0_0_0_2px_white]; }
+  .togs { @apply mb-3 flex flex-wrap items-center gap-2; }
+  .tog { @apply min-h-[34px] rounded-full border-[1.5px] border-slate-200 bg-slate-50 py-1 pl-2.5 pr-3 text-sm text-slate-500 hover:border-brand-200; }
+  .tog::before { content: ""; @apply mr-1.5 inline-block h-3.5 w-3.5 rounded border-[1.5px] border-slate-300 bg-white align-[-2px]; }
+  .tog.on { @apply border-brand-200 bg-brand-50 text-brand-900; }
+  .tog.on::before { @apply border-brand-600 bg-brand-600;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-6.5' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: center; background-size: 12px; background-repeat: no-repeat; }
+
+  /* ===== 月曆（尺寸跟色帶的負邊距有關，改之前先看 .bands） ===== */
+  /* 月曆卡片左右留白小一點，格子才夠寬放色帶文字和人員 */
+  .calcard { @apply px-2.5; }
+  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+  .cal .wd { @apply pb-1.5 pt-1 text-center text-[13px] font-semibold text-slate-500; }
+  .cal .wd.sun, .cal .d.sun .n { color: var(--red); }
+  .cal .wd.sat, .cal .d.sat .n { color: var(--sat); }
+  .cal .d { @apply flex min-h-[68px] min-w-0 cursor-pointer select-none flex-col items-center gap-0.5 rounded-xl border border-slate-200 bg-white shadow-sm transition duration-150 hover:border-brand-200 active:scale-95;
+    padding: 4px 2px; }
+  .cal .d.today { @apply border-2 border-amber-400 bg-amber-50; }
+  .cal .d.blank { @apply cursor-default border-transparent bg-slate-50 shadow-none hover:border-transparent active:scale-100; }
+  .cal .d .n { @apply text-[15px] font-bold tabular-nums text-slate-700; }
+  .cal.mini .d { @apply min-h-[40px]; }
+  .cal.mini .d.on .n { @apply text-white; }
+  .tag { @apply max-w-full overflow-hidden whitespace-nowrap rounded-md px-1.5 py-px text-xs font-bold text-white; }
+  .ot { @apply text-[10px] font-bold text-amber-700; }
+  .dots { @apply flex flex-wrap justify-center gap-[3px]; }
+  .dots i { @apply block h-[9px] w-[9px] rounded-full; }
+  .cnt { @apply text-[11px] font-semibold text-slate-600; }
+  .pj { @apply max-w-full overflow-hidden whitespace-nowrap text-[10px] font-bold; }
+  /* 工程色帶：施工日連成一條、沒施工的日子斷開（5.5px＝格子內距 2＋框 1＋半個間距 2.5） */
+  .bands { align-self: stretch; margin: auto -5.5px 0; display: flex; flex-direction: column; gap: 3px; padding-top: 3px; }
+  .band { height: 16px; font-size: 10.5px; line-height: 16px; color: white; white-space: nowrap; overflow: visible; font-weight: 700; }
+  .band.s { margin-left: 5.5px; border-radius: 8px 0 0 8px; }
+  .band.e { margin-right: 5.5px; border-radius: 0 8px 8px 0; }
+  .band.s.e { border-radius: 8px; text-align: center; }
+  .band span { position: relative; z-index: 1; display: inline-block; vertical-align: top; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .ppl { height: 15px; margin: 1px 5.5px 0; display: flex; justify-content: center; overflow: hidden; }
+  .ppl i + i { margin-left: -3px; }
+  .ppl i { width: 14px; height: 14px; border-radius: 50%; color: white; font-style: normal; font-size: 9px; font-weight: 700; line-height: 14px; text-align: center; flex: none; box-shadow: 0 0 0 1px white; }
+  .ppl b { font-size: 9px; color: var(--muted); line-height: 14px; margin-left: 1px; letter-spacing: -.3px; }
+
+  /* ===== 統計 ===== */
+  .kpi { @apply grid grid-cols-3 gap-2.5; }
+  .kpi div { @apply rounded-xl bg-gradient-to-b from-brand-50/70 to-brand-50 px-1.5 py-3 text-center ring-1 ring-brand-100; }
+  .kpi b { @apply block text-lg font-bold tabular-nums text-brand-900; }
+  .kpi small { @apply text-[11px] text-slate-500; }
+  .pbig { @apply mb-0.5 mt-3 text-lg font-bold tabular-nums text-brand-900; }
+  .emp-h { @apply flex items-center gap-2; }
+  .dot { @apply h-3 w-3 flex-none rounded-full; }
+  .money { @apply text-xl font-bold tabular-nums text-brand-900; }
+  table.br { @apply mt-2.5 w-full border-collapse text-sm; }
+  table.br td { @apply border-b border-slate-100 px-0.5 py-2; }
+  table.br td:last-child { @apply text-right tabular-nums; }
+  table.br tr.sum td { @apply border-b-0 font-bold text-brand-900; }
+  .daylist { @apply mt-1.5 text-[13px]; }
+  .daylist div { @apply flex justify-between border-b border-dashed border-slate-200 py-1; }
+  .li { @apply -mx-2 flex cursor-pointer items-center gap-3 rounded-xl border-b border-slate-100 px-2 py-3 transition hover:bg-slate-50 active:bg-slate-100; }
+  .li:last-child { @apply border-b-0; }
+  .help ol { @apply list-decimal; }
+  .help li { @apply my-1.5 leading-relaxed; }
+
+  /* ===== 彈出視窗 ===== */
+  .mask { @apply fixed inset-0 z-50 hidden bg-slate-900/40 backdrop-blur-[2px]; }
+  .mask.show { @apply block; }
+  .sheet { @apply invisible fixed inset-x-0 bottom-0 z-[51] mx-auto max-h-[88vh] max-w-3xl translate-y-[105%] overflow-auto rounded-t-3xl bg-white px-5 pt-2.5 shadow-[0_-8px_30px_rgba(15,31,61,.18)];
+    padding-bottom: calc(20px + env(safe-area-inset-bottom)); transition: transform .25s cubic-bezier(.2,.8,.2,1), visibility .25s; }
+  .sheet::before { content: ""; @apply mx-auto mb-3 block h-1.5 w-10 rounded-full bg-slate-200; }
+  .sheet.show { @apply visible translate-y-0; }
+  .sheet h2 { @apply mb-1.5 flex items-center gap-2 text-lg font-bold text-brand-900; }
+  .de { @apply mt-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5; }
+  .de .g { @apply grid grid-cols-2 gap-2; }
+  .de .g label { @apply mb-1 mt-1.5 text-xs; }
+  .step { @apply flex items-center gap-2; }
+  .step button { @apply w-11 bg-slate-100 p-0 text-xl text-brand-900; }
+  .step b { @apply min-w-[28px] text-center text-[17px]; }
+  .pick { @apply mt-3 flex flex-col gap-1.5; }
+  .pick button { @apply flex items-center gap-2 border-2 border-transparent bg-slate-50 text-left font-medium text-ink hover:bg-brand-50; }
+  .pick button.on { @apply border-brand-500 bg-brand-50 font-bold; }
+  .pick button.on::after { content: "✓"; @apply font-extrabold text-brand-600; }
+  .ask { @apply fixed left-1/2 top-1/2 z-[71] hidden w-[min(88vw,360px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-5 shadow-2xl shadow-slate-900/30; }
+  .ask.show { @apply block; }
+  .ask p { @apply mb-4 mt-0 whitespace-pre-wrap text-base leading-relaxed; }
+  .ask textarea { @apply mb-3 min-h-[120px] text-sm; }
+  .toast { @apply pointer-events-none fixed left-1/2 z-[60] -translate-x-1/2 rounded-full bg-brand-900 px-5 py-2.5 text-sm text-white opacity-0 shadow-lg shadow-brand-900/30 transition-opacity duration-200;
+    bottom: calc(100px + env(safe-area-inset-bottom)); }
+  .toast.show { @apply opacity-100; }
+}
+
+@media (prefers-reduced-motion: reduce) { .sheet, .cal .d, .toast, button { transition: none !important; } }
