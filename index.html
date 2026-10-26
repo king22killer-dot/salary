@@ -86,7 +86,7 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 .band{height:14px;font-size:10px;line-height:14px;color:white;white-space:nowrap;overflow:visible;font-weight:700}
 .band.s{margin-left:6.5px;border-radius:7px 0 0 7px}.band.e{margin-right:6.5px;border-radius:0 7px 7px 0}.band.s.e{border-radius:7px}
 .band span{position:relative;z-index:1;padding-left:4px;text-shadow:0 0 2px rgba(0,0,0,.35)}
-.xn{font-size:10px;font-weight:700;color:#6d28d9;white-space:nowrap}
+.cal.mini .d{min-height:38px;cursor:pointer}.cal.mini .d.on .n{color:white}
 .pj{font-size:10px;font-weight:700;max-width:100%;overflow:hidden;white-space:nowrap}
 .pick{display:flex;flex-direction:column;gap:6px;margin-top:10px}.pick button{display:flex;align-items:center;gap:8px;background:#f1f5f9;color:#0f172a;border:2px solid transparent;text-align:left}
 .pick button.on{background:#dbeafe;border-color:#2563eb;font-weight:700}.pick button.on::after{content:"✓";color:#2563eb;font-weight:800}
@@ -115,7 +115,7 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 <div class="mask" id="askMask" style="z-index:70"></div>
 <div class="ask" id="ask"></div>
 <script>
-const APP_VER='v8（2026-10-26）';
+const APP_VER='v9（2026-10-26）';
 const KEY='salaryBoss.v1';
 const OT_UNIT=0.5; // 加班一次＝0.5 工
 const COLORS=['#2563eb','#7c3aed','#db2777','#0891b2','#ea580c','#65a30d','#0f766e','#9333ea'];
@@ -213,7 +213,7 @@ function rateOn(e,k){let v=num(e.rate);raisesOf(e).forEach(x=>{if(x.from<=k)v=nu
 
 // ===== 薪資計算：每天的工數 × 當天的日薪（調薪後分段計算）=====
 function calc(e,from,to){
-  const r={days:0,work:0,otCount:0,ot:0,units:0,pay:0,add:0,sub:0,xn:0,list:[],segs:[]};
+  const r={days:0,work:0,otCount:0,ot:0,units:0,pay:0,add:0,sub:0,list:[],segs:[]};
   let seg=null;
   for(let k=from;k<=to;k=addD(k,1)){
     const rate=rateOn(e,k);
@@ -223,7 +223,7 @@ function calc(e,from,to){
     const w=num(rec.w),oc=num(rec.ot);
     if(w>0)r.days++;
     r.work+=w;r.otCount+=oc;r.add+=num(rec.add);r.sub+=num(rec.sub);seg.units+=w+oc*OT_UNIT;
-    if(w||oc||num(rec.add)||num(rec.sub)||rec.note){r.list.push({k,rec});if(rec.x&&w)r.xn++;}
+    if(w||oc||num(rec.add)||num(rec.sub)||rec.note)r.list.push({k,rec});
   }
   r.ot=r.otCount*OT_UNIT;r.units=r.work+r.ot;
   r.segs.forEach(g=>g.pay=Math.round(g.units*g.rate));
@@ -282,13 +282,11 @@ function renderCal(){
     if(S.emp==='all'){
       const on=emps.filter(e=>day[e.id]);
       const units=on.reduce((a,e)=>a+num(day[e.id].w)+num(day[e.id].ot)*OT_UNIT,0);
-      inner=`<div class="dots">${on.map(e=>`<i style="background:${e.color}"></i>`).join('')}</div>`+(units?`<div class="cnt">${fu(units)}工${on.some(e=>day[e.id].x)?'🌙':''}</div>`:'');
+      inner=`<div class="dots">${on.map(e=>`<i style="background:${e.color}"></i>`).join('')}</div>`+(units?`<div class="cnt">${fu(units)}工</div>`:'');
     }else{
       const rec=day[S.emp];
       if(rec&&num(rec.w))inner=`<div class="tag" style="background:${num(rec.w)===1?'#2563eb':'#0891b2'}">${wLabel(num(rec.w))} 工</div>`;
       if(rec&&num(rec.ot))inner+=`<div class="ot">+加${num(rec.ot)>1?'×'+num(rec.ot):''}</div>`;
-      if(rec&&rec.x)inner+=`<div class="xn">🌙跨日</div>`;
-      else if(((DB.records[addD(key,-1)]||{})[S.emp]||{}).x)inner+=`<div class="xn" style="opacity:.6">↳前晚</div>`;
       const pj=rec&&projById(rec.p);if(pj)inner+=`<div class="pj" style="color:${pj.color}">${esc(pj.name.slice(0,3))}</div>`;
       if(rec&&(num(rec.add)||num(rec.sub)||rec.note))inner+=`<div class="cnt">•</div>`;
     }
@@ -353,7 +351,6 @@ function dayEditor(d){
     <div class="g"><div><label>加給／獎金（元）</label><input data-f="add" type="number" inputmode="numeric" value="${esc(r.add??'')}" placeholder="0"></div>
     <div><label>預支／扣款（元）</label><input data-f="sub" type="number" inputmode="numeric" value="${esc(r.sub??'')}" placeholder="0"></div></div>
     <label>工程</label><select data-f="p">${projOptions(r.p)}</select>
-    <label style="margin-top:8px"><input type="checkbox" data-x ${r.x?'checked':''}>🌙 跨日施作（做到隔天，記在開工這天，工數照算）</label>
     <label>備註</label><input data-f="note" value="${esc(r.note??'')}" placeholder="例如：做了什麼"></div>`;
   });
   h+=`<div class="row" style="margin-top:12px"><button class="secondary grow" onclick="closeSheet()">取消</button><button class="primary grow" id="dSave">儲存</button></div>`;
@@ -368,7 +365,7 @@ function dayEditor(d){
   });
   $('dSave').onclick=()=>{
     document.querySelectorAll('#sheet .de').forEach(box=>{
-      const rec={w:num(box.dataset.w),ot:num(box.dataset.ot),x:box.querySelector('[data-x]').checked?1:0};
+      const rec={w:num(box.dataset.w),ot:num(box.dataset.ot)};
       box.querySelectorAll('[data-f]').forEach(i=>{const v=i.value.trim();if(v!=='')rec[i.dataset.f]=v;});
       setRec(key,box.dataset.e,rec);
     });
@@ -383,13 +380,25 @@ const projById=id=>id?DB.projects.find(x=>x.id===id):null;
 const openProjs=()=>DB.projects.filter(x=>!x.done);
 const jobMode=()=>S.tab==='cal'&&S.calMode==='job';
 function setJd(k){S.jd=k;const t=k2d(k);S.y=t.getFullYear();S.m=t.getMonth();}
-// 施工期間：from（必填才會畫色帶）～ to（空白＝未定，畫到月底）
-// 施工時段 t1～t2；收工時間比開工早（或一樣）＝跨日，做到隔天
-const isOvernight=x=>!!(x&&x.t1&&x.t2&&x.t2<=x.t1);
-const timeText=x=>x&&x.t1?`${x.t1}～${isOvernight(x)?'隔天 ':''}${x.t2||''}${isOvernight(x)?'（跨日）':''}`:'';
-const prevNight=(k,id)=>!!((DB.records[addD(k,-1)]||{})[id]||{}).x;
-const projActive=(x,k)=>!x.from||(x.from<=k&&(!x.to||k<=x.to));
-const rangeText=x=>x.from?`${ymd(x.from)}～${x.to?ymd(x.to):'未定'}`:'';
+// 施工日：連續施工＝from～to（to 空白＝未定）；指定施工日＝x.days（可以隔一天或隔好幾天）
+const hasDays=x=>!!(x.days&&x.days.length);
+const isWorkDay=(x,k)=>hasDays(x)?x.days.includes(k):(x.from<=k&&(!x.to||k<=x.to));
+const projActive=(x,k)=>!x.from||isWorkDay(x,k);
+// 把日期清單壓成「10/5、10/7、10/12～10/14」
+function daysText(days){
+  const out=[];let a=null,b=null;
+  days.forEach(k=>{if(b&&addD(b,1)===k)b=k;else{if(a)out.push(a===b?md(a):`${md(a)}～${md(b)}`);a=b=k;}});
+  if(a)out.push(a===b?md(a):`${md(a)}～${md(b)}`);
+  return out.join('、');
+}
+const rangeText=x=>hasDays(x)?`${daysText(x.days)}（共 ${x.days.length} 天）`:x.from?`${ymd(x.from)}～${x.to?ymd(x.to):'未定'}`:'';
+// 工程安排畫面「這天也要施工」：把這天加進施工日（連續施工的工程會改成指定施工日）
+function addWorkDay(x,k){
+  if(!hasDays(x)){if(!x.from||!x.to)return false;const d=[];for(let t=x.from;t<=x.to;t=addD(t,1))d.push(t);x.days=d;}
+  if(!x.days.includes(k))x.days.push(k);
+  x.days.sort();x.from=x.days[0];x.to=x.days[x.days.length-1];
+  return true;
+}
 // 這個月有哪些工程要畫色帶，每個工程分一條固定的「車道」，色帶才會上下對齊
 function monthLanes(mf,mt){
   const list=DB.projects.filter(x=>x.from&&x.from<=mt&&(!x.to||x.to>=mf)).sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
@@ -410,16 +419,16 @@ function bandsHtml(lanes,k,rowStart){
   let h='<div class="bands">';
   for(let i=0;i<n;i++){
     const o=on.find(z=>z.lane===i);
-    if(!o){h+='<div class="band" style="background:none"></div>';continue;}
-    const s=k===o.x.from,e=k===o.x.to;
+    if(!o||!isWorkDay(o.x,k)){h+='<div class="band" style="background:none"></div>';continue;}
+    const s=!isWorkDay(o.x,addD(k,-1)),e=!isWorkDay(o.x,addD(k,1));
     h+=`<div class="band${s?' s':''}${e?' e':''}" style="background:${o.x.color}${o.x.done?';opacity:.45':''}">${s||rowStart?`<span>${esc(o.x.name)}</span>`:''}</div>`;
   }
-  const more=on.filter(o=>o.lane>=MAX_LANES).length;
+  const more=on.filter(o=>o.lane>=MAX_LANES&&isWorkDay(o.x,k)).length;
   return h+(more?`<div class="cnt" style="text-align:center">+${more}</div>`:'')+'</div>';
 }
 function monthProjCard(lanes){
   if(!lanes.length)return '';
-  return `<div class="card"><b>🏗️ 本月工程</b><div class="small">月曆下方的色帶＝施工期間。點工程可以修改。</div>
+  return `<div class="card"><b>🏗️ 本月工程</b><div class="small">月曆下方的色帶＝施工日，沒施工的日子會斷開。點工程可以修改。</div>
   ${lanes.map(o=>`<div class="li" data-mpj="${o.x.id}"><span class="dot" style="background:${o.x.color}"></span><div class="grow"><b>${esc(o.x.name)}</b>${o.x.done?' <span class="small">（已完工）</span>':''}<div class="small">📆 ${rangeText(o.x)}${o.x.place?'・'+esc(o.x.place):''}</div></div><span class="small">編輯 ›</span></div>`).join('')}</div>`;
 }
 function projOptions(cur){
@@ -439,7 +448,6 @@ function renderJobs(){
   if(!S.jd)setJd(todayKey());
   const k=S.jd,day=DB.records[k]||{},emps=activeEmps();
   const shown=DB.projects.filter(x=>(!x.done&&projActive(x,k))||emps.some(e=>day[e.id]&&day[e.id].p===x.id));
-  const hidden=DB.projects.filter(x=>!x.done&&!projActive(x,k)&&!shown.includes(x)).length;
   let h=`<div class="card"><div class="pbig" style="margin-top:0">${ymd(k)}（${wdOf(k)}）${k===todayKey()?'　<span class="small">今天</span>':k===addD(todayKey(),1)?'　<span class="small">明天</span>':''}</div>
   <div class="row" style="margin-top:6px"><input type="date" id="jdPick" class="grow" value="${k}"><button class="secondary" id="jdToday">今天</button><button class="secondary" id="jdTom">明天</button></div>
   <div class="small" style="margin-top:6px">上方 ‹ › 換前一天／後一天。安排工程只是派工，不會算薪資；要算薪資請在「📅 記工」記工數，或安排時勾「同時記 1 工」。</div></div>`;
@@ -447,13 +455,15 @@ function renderJobs(){
   shown.forEach(x=>{
     const who=emps.filter(e=>day[e.id]&&day[e.id].p===x.id);
     h+=`<div class="card" style="border-left:6px solid ${x.color}"><div class="emp-h"><b class="grow">${esc(x.name)}${x.done?' <span class="small">（已完工）</span>':''}</b><span class="small">${who.length} 人</span></div>
-    ${x.place?`<div class="small">📍 ${esc(x.place)}</div>`:''}${x.from?`<div class="small">📆 ${rangeText(x)}</div>`:''}${x.t1?`<div class="small">${isOvernight(x)?'🌙':'🕗'} ${timeText(x)}</div>`:''}
+    ${x.place?`<div class="small">📍 ${esc(x.place)}</div>`:''}${x.from?`<div class="small">📆 ${rangeText(x)}</div>`:''}
     <div class="chips" style="flex-wrap:wrap;margin-top:8px">${who.map(e=>`<span class="chip" style="cursor:default"><span class="dot" style="display:inline-block;background:${e.color};margin-right:4px;vertical-align:-1px"></span>${esc(e.name)}${num(day[e.id].w)?`<span class="small">　${fu(num(day[e.id].w))}工</span>`:''}</span>`).join('')||'<span class="small">還沒有安排人員</span>'}</div>
     <button class="secondary" style="width:100%;margin-top:8px" data-assign="${x.id}">👷 安排人員</button></div>`;
   });
   if(DB.projects.length){
     const free=emps.filter(e=>!(day[e.id]&&projById(day[e.id].p)));
-    if(hidden)h+=`<div class="small" style="margin:-4px 4px 10px">另有 ${hidden} 個工程不在這天的施工期間，沒有列出（到「管理工程」改日期）。</div>`;
+    const hid=DB.projects.filter(x=>!x.done&&!projActive(x,k)&&!shown.includes(x));
+    if(hid.length)h+=`<div class="card"><b>這天沒排施工的工程</b><div class="small" style="margin:2px 0 6px">要臨時去做，按「這天也要施工」加進施工日。</div>
+    ${hid.map(x=>`<div class="row" style="justify-content:space-between;padding:4px 0"><span><span class="dot" style="display:inline-block;background:${x.color};margin-right:4px"></span>${esc(x.name)}<span class="small">　${rangeText(x)}</span></span>${(hasDays(x)||(x.from&&x.to))?`<button class="secondary" style="min-height:34px;padding:4px 10px" data-addday="${x.id}">📌 這天也要施工</button>`:''}</div>`).join('')}</div>`;
     h+=`<div class="card"><b>還沒安排</b><div class="small" style="margin-top:4px">${free.map(e=>esc(e.name)).join('、')||'全部都安排好了 👍'}</div></div>
     <div class="card"><div class="row"><button class="secondary grow" id="jdCopy">📋 照前一天安排</button><button class="line grow" id="jdLine">💬 LINE 傳派工單</button></div>
     <button class="secondary" style="width:100%;margin-top:8px" id="pjMgr">🏗️ 管理工程（${openProjs().length} 個進行中）</button></div>`;
@@ -467,13 +477,13 @@ function renderJobs(){
   if($('jdCopy'))$('jdCopy').onclick=copyPrevDay;
   if($('jdLine'))$('jdLine').onclick=()=>shareSheet('派工單',dispatchText(k),'按「用 LINE 傳送」後，在 LINE 選工作群組或員工的聊天室。');
   document.querySelectorAll('[data-assign]').forEach(b=>b.onclick=()=>assignSheet(b.dataset.assign));
+  document.querySelectorAll('[data-addday]').forEach(b=>b.onclick=()=>{const x=projById(b.dataset.addday);if(addWorkDay(x,k)){save();render();toast(`「${x.name}」加入 ${md(k)} 施工`);}});
 }
 function assignSheet(pid){
   const x=projById(pid),k=S.jd,day=DB.records[k]||{},emps=activeEmps();
   openSheet(`<h2>👷 ${esc(x.name)}</h2><div class="small">${ymd(k)}（${wdOf(k)}）　點名字選擇要去這個工程的人。</div>
   <div class="pick">${emps.map(e=>{const rc=day[e.id]||{},o=projById(rc.p);
-    return `<button type="button" data-pe="${e.id}" class="${rc.p===pid?'on':''}"><span class="dot" style="background:${e.color}"></span><span class="grow" style="text-align:left">${esc(e.name)}</span><span class="small">${prevNight(k,e.id)?'<b style="color:#6d28d9">🌙前晚跨日</b> ':''}${o&&o.id!==pid?'目前在 '+esc(o.name):num(rc.w)?fu(num(rc.w))+' 工':''}</span></button>`;}).join('')}</div>
-  ${isOvernight(x)?`<div class="small" style="margin-top:6px">🌙 這個工程是跨日施工（${timeText(x)}），安排的人會自動標成跨日。</div>`:''}
+    return `<button type="button" data-pe="${e.id}" class="${rc.p===pid?'on':''}"><span class="dot" style="background:${e.color}"></span><span class="grow" style="text-align:left">${esc(e.name)}</span><span class="small">${o&&o.id!==pid?'目前在 '+esc(o.name):num(rc.w)?fu(num(rc.w))+' 工':''}</span></button>`;}).join('')}</div>
   <label style="margin-top:10px"><input type="checkbox" id="asWork">同時記 1 工（還沒記工的人）</label>
   <div class="row" style="margin-top:12px"><button class="secondary grow" onclick="closeSheet()">取消</button><button class="primary grow" id="asSave">儲存</button></div>`);
   document.querySelectorAll('#sheet [data-pe]').forEach(b=>b.onclick=()=>b.classList.toggle('on'));
@@ -481,8 +491,8 @@ function assignSheet(pid){
     const work=$('asWork').checked;let c=0;
     document.querySelectorAll('#sheet [data-pe]').forEach(b=>{
       const id=b.dataset.pe,cur=Object.assign({},(DB.records[k]||{})[id]||{});
-      if(b.classList.contains('on')){cur.p=pid;if(work&&!num(cur.w))cur.w=1;if(isOvernight(x))cur.x=1;c++;}
-      else if(cur.p===pid){delete cur.p;if(isOvernight(x))delete cur.x;}
+      if(b.classList.contains('on')){cur.p=pid;if(work&&!num(cur.w))cur.w=1;c++;}
+      else if(cur.p===pid)delete cur.p;
       else return;
       setRec(k,id,cur);
     });
@@ -498,7 +508,7 @@ function copyPrevDay(){
   emps.forEach(e=>{
     const from=(DB.records[src]||{})[e.id],pj=from&&projById(from.p);if(!pj||pj.done||!projActive(pj,k))return;
     const cur=Object.assign({},(DB.records[k]||{})[e.id]||{});if(projById(cur.p))return;
-    cur.p=pj.id;if(isOvernight(pj))cur.x=1;setRec(k,e.id,cur);c++;
+    cur.p=pj.id;setRec(k,e.id,cur);c++;
   });
   save();render();toast(c?`照 ${md(src)} 安排了 ${c} 人`:`${md(src)} 的人今天都已經安排了`);
 }
@@ -506,9 +516,7 @@ function dispatchText(k){
   const day=DB.records[k]||{},emps=activeEmps(),L=[`【派工單】${ymd(k)}（${wdOf(k)}）`];
   DB.projects.forEach(x=>{
     const who=emps.filter(e=>day[e.id]&&day[e.id].p===x.id);if(!who.length)return;
-    L.push('',`■ ${x.name}${x.place?`（${x.place}）`:''}`);
-    if(x.t1)L.push(`　${isOvernight(x)?'🌙':'🕗'} ${timeText(x)}`);
-    L.push(`　${who.map(e=>e.name).join('、')}`);
+    L.push('',`■ ${x.name}${x.place?`（${x.place}）`:''}`,`　${who.map(e=>e.name).join('、')}`);
     if(x.note)L.push(`　備註：${x.note}`);
   });
   const free=emps.filter(e=>!(day[e.id]&&projById(day[e.id].p)));
@@ -539,23 +547,53 @@ function editProject(id,fromCal){
   <label for="pjName">工程名稱</label><input id="pjName" value="${esc(x.name)}" placeholder="例如：中山路透天厝">
   <div class="row"><div class="grow"><label for="pjPlace">地點</label><input id="pjPlace" value="${esc(x.place||'')}" placeholder="例如：台中市中山路 100 號"></div>
   <div style="width:80px"><label for="pjColor">顏色</label><input id="pjColor" type="color" value="${x.color}"></div></div>
-  <label>施工期間（安排日期）</label>
-  <div class="row"><input id="pjFrom" class="grow" type="date" value="${x.from||''}" aria-label="開始日期"><span>～</span><input id="pjTo" class="grow" type="date" value="${x.to||''}" aria-label="結束日期"></div>
-  <div class="small" style="margin-top:4px">會在「📅 記工」月曆上用色帶標出來。結束日期不確定可以先空著。</div>
-  <label>施工時段（可不填）</label>
-  <div class="row"><input id="pjT1" class="grow" type="time" value="${x.t1||''}" aria-label="開工時間"><span>～</span><input id="pjT2" class="grow" type="time" value="${x.t2||''}" aria-label="收工時間"></div>
-  <div class="small" style="margin-top:4px">夜間施工做到隔天，例如 22:00～06:00，收工時間比開工早就會自動當成<b>跨日</b>。</div>
+  <label>施工日期</label>
+  <div class="seg"><button type="button" data-dm="range">連續施工</button><button type="button" data-dm="days">指定施工日</button></div>
+  <div id="dmRange" style="margin-top:8px"><div class="row"><input id="pjFrom" class="grow" type="date" value="${x.from||''}" aria-label="開始日期"><span>～</span><input id="pjTo" class="grow" type="date" value="${x.to||''}" aria-label="結束日期"></div>
+  <div class="small" style="margin-top:4px">每天都做。結束日期不確定可以先空著。</div></div>
+  <div id="dmDays" style="margin-top:8px"><div class="small">隔一天或隔好幾天才去做：點日期選施工日，再點一次取消。</div>
+  <div class="row" style="margin:6px 0"><button class="secondary" type="button" id="pcPrev">‹</button><b class="grow" style="text-align:center" id="pcLabel"></b><button class="secondary" type="button" id="pcNext">›</button></div>
+  <div class="cal mini" id="pcCal"></div><div class="small" id="pcSum" style="margin-top:6px"></div></div>
+  <div class="small" style="margin-top:4px">施工日會在「📅 記工」月曆上用色帶標出來。</div>
   <label for="pjNote">備註（會出現在派工單）</label><input id="pjNote" value="${esc(x.note||'')}" placeholder="例如：7:30 集合、帶梯子">
   <label style="margin-top:12px"><input type="checkbox" id="pjDone" ${x.done?'checked':''}>已完工（不會再出現在安排清單，舊紀錄保留）</label>
   <div class="row" style="margin-top:12px">${id?'<button class="danger" id="pjDel">刪除</button>':''}<button class="secondary grow" id="pjBack">返回</button><button class="primary grow" id="pjSave">儲存</button></div>`);
   const back=()=>fromCal?closeSheet():projectsSheet();
   $('pjBack').onclick=back;
+  // 施工日小月曆
+  let mode=hasDays(x)?'days':'range';const sel=new Set(x.days||[]);
+  const t0=k2d(x.from||todayKey());let pcY=t0.getFullYear(),pcM=t0.getMonth();
+  const setMode=m=>{mode=m;document.querySelectorAll('#sheet [data-dm]').forEach(b=>b.classList.toggle('on',b.dataset.dm===m));$('dmRange').hidden=m!=='range';$('dmDays').hidden=m!=='days';};
+  const drawPc=()=>{
+    $('pcLabel').textContent=`${pcY}年${pcM+1}月`;
+    const first=new Date(pcY,pcM,1).getDay();let h='日一二三四五六'.split('').map((w,i)=>`<div class="wd ${i===0?'sun':i===6?'sat':''}">${w}</div>`).join('');
+    for(let i=0;i<first;i++)h+='<div class="d blank"></div>';
+    for(let d=1;d<=daysIn(pcY,pcM);d++){const k=dkey(pcY,pcM,d),on=sel.has(k);
+      h+=`<div class="d${on?' on':''}" data-pc="${k}" style="${on?`background:${$('pjColor').value};`:''}"><div class="n">${d}</div></div>`;}
+    $('pcCal').innerHTML=h;
+    const all=[...sel].sort();$('pcSum').textContent=all.length?`已選 ${all.length} 天：${daysText(all)}`:'還沒選施工日';
+    document.querySelectorAll('#pcCal [data-pc]').forEach(c=>c.onclick=()=>{const k=c.dataset.pc;sel.has(k)?sel.delete(k):sel.add(k);drawPc();});
+  };
+  document.querySelectorAll('#sheet [data-dm]').forEach(b=>b.onclick=()=>{
+    // 從連續施工切過來時，先把期間內的日子都選起來，再刪掉不做的
+    if(b.dataset.dm==='days'&&!sel.size){const f=$('pjFrom').value,t=$('pjTo').value;if(f&&t&&f<=t){for(let k=f;k<=t;k=addD(k,1))sel.add(k);const d=k2d(f);pcY=d.getFullYear();pcM=d.getMonth();}}
+    setMode(b.dataset.dm);drawPc();
+  });
+  $('pcPrev').onclick=()=>{pcM--;if(pcM<0){pcM=11;pcY--;}drawPc();};
+  $('pcNext').onclick=()=>{pcM++;if(pcM>11){pcM=0;pcY++;}drawPc();};
+  $('pjColor').oninput=drawPc;
+  setMode(mode);drawPc();
   $('pjSave').onclick=()=>{
     const name=$('pjName').value.trim();if(!name){toast('請輸入工程名稱');return;}
-    let f=$('pjFrom').value,t=$('pjTo').value;
-    if(!f&&t){toast('請先填開始日期');return;}
-    if(f&&t&&f>t)[f,t]=[t,f];
-    Object.assign(x,{name,from:f,to:t,t1:$('pjT1').value,t2:$('pjT2').value,place:$('pjPlace').value.trim(),note:$('pjNote').value.trim(),color:$('pjColor').value,done:$('pjDone').checked});
+    let f=$('pjFrom').value,t=$('pjTo').value,days=[];
+    if(mode==='days'){
+      days=[...sel].sort();if(!days.length){toast('請點選施工日');return;}
+      f=days[0];t=days[days.length-1];
+    }else{
+      if(!f&&t){toast('請先填開始日期');return;}
+      if(f&&t&&f>t)[f,t]=[t,f];
+    }
+    Object.assign(x,{name,from:f,to:t,days,place:$('pjPlace').value.trim(),note:$('pjNote').value.trim(),color:$('pjColor').value,done:$('pjDone').checked});
     if(!id)DB.projects.push(x);
     save();render();back();toast('已儲存');
   };
@@ -600,12 +638,12 @@ function renderStat(){
   rs.forEach(({e,r})=>{
     const sg=paySegs(r);
     h+=`<div class="card"><div class="emp-h"><span class="dot" style="background:${e.color}"></span><b class="grow">${esc(e.name)}</b><span class="money">$${fmt(r.total)}</span></div>
-    <div class="small" style="margin-top:4px">出勤 ${r.days} 天・正班 ${fu(r.work)} 工・加班 ${r.otCount} 次（${fu(r.ot)} 工）・共 ${fu(r.units)} 工${r.xn?`・🌙跨日 ${r.xn} 次`:''}${sg.length>1?'・<b style="color:#b45309">期間內有調薪</b>':''}</div>
+    <div class="small" style="margin-top:4px">出勤 ${r.days} 天・正班 ${fu(r.work)} 工・加班 ${r.otCount} 次（${fu(r.ot)} 工）・共 ${fu(r.units)} 工${sg.length>1?'・<b style="color:#b45309">期間內有調薪</b>':''}</div>
     <table class="br">${sg.map(g=>`<tr><td>${sg.length>1?`${md(g.from)}～${md(g.to)}　`:''}${fu(g.units)} 工 × 日薪 ${fmt(g.rate)}</td><td>${fmt(g.pay)}</td></tr>`).join('')}
     <tr><td>加給／獎金</td><td>${fmt(r.add)}</td></tr><tr><td>預支／扣款</td><td>${r.sub?'−'+fmt(r.sub):0}</td></tr>
     <tr class="sum"><td>實發</td><td>${fmt(r.total)}</td></tr></table>
     <button class="line" style="width:100%;margin-top:8px" data-slip="${e.id}">💬 用 LINE 傳薪資單</button>
-    <details><summary>每日明細（${r.list.length} 筆）</summary><div class="daylist">${r.list.map(({k,rec})=>`<div><span>${md(k)} ${num(rec.w)?fu(num(rec.w))+' 工':''}${num(rec.ot)?` 加班${num(rec.ot)}次`:''}${projById(rec.p)?` 〔${esc(projById(rec.p).name)}〕`:''}${rec.x?' 🌙跨日':''}${rec.note?`（${esc(rec.note)}）`:''}</span><span>${num(rec.add)?'+'+fmt(num(rec.add)):''}${num(rec.sub)?' −'+fmt(num(rec.sub)):''}</span></div>`).join('')||'<div>這段期間沒有紀錄</div>'}</div></details></div>`;
+    <details><summary>每日明細（${r.list.length} 筆）</summary><div class="daylist">${r.list.map(({k,rec})=>`<div><span>${md(k)} ${num(rec.w)?fu(num(rec.w))+' 工':''}${num(rec.ot)?` 加班${num(rec.ot)}次`:''}${projById(rec.p)?` 〔${esc(projById(rec.p).name)}〕`:''}${rec.note?`（${esc(rec.note)}）`:''}</span><span>${num(rec.add)?'+'+fmt(num(rec.add)):''}${num(rec.sub)?' −'+fmt(num(rec.sub)):''}</span></div>`).join('')||'<div>這段期間沒有紀錄</div>'}</div></details></div>`;
   });
   $('view').innerHTML=h;
   bindPeriod();
@@ -629,7 +667,7 @@ function copyText(t){
 // ===== 薪資單（LINE 傳送）=====
 function slipText(e,r,p,detail){
   const sg=paySegs(r),L=[];
-  L.push(`【薪資單】${e.name}`,`期間：${ymd(p.from)}～${ymd(p.to)}`,'',`出勤：${r.days} 天`,`正班：${fu(r.work)} 工`,`加班：${r.otCount} 次（${fu(r.ot)} 工）`,...(r.xn?[`跨日施作：${r.xn} 次`]:[]),`合計：${fu(r.units)} 工`,'');
+  L.push(`【薪資單】${e.name}`,`期間：${ymd(p.from)}～${ymd(p.to)}`,'',`出勤：${r.days} 天`,`正班：${fu(r.work)} 工`,`加班：${r.otCount} 次（${fu(r.ot)} 工）`,`合計：${fu(r.units)} 工`,'');
   if(sg.length>1){L.push('工資（期間內調薪）：');sg.forEach(g=>L.push(`　${md(g.from)}～${md(g.to)}　${fu(g.units)} 工 × ${fmt(g.rate)} ＝ ${fmt(g.pay)}`));}
   else L.push(`工資：${fu(sg[0].units)} 工 × 日薪 ${fmt(sg[0].rate)} ＝ ${fmt(sg[0].pay)}`);
   if(r.add)L.push(`加給／獎金：＋${fmt(r.add)}`);
@@ -639,7 +677,7 @@ function slipText(e,r,p,detail){
     L.push('','— 每日明細 —');
     r.list.forEach(({k,rec})=>{
       const a=[];if(num(rec.w))a.push(`${fu(num(rec.w))} 工`);if(num(rec.ot))a.push(`加班${num(rec.ot)}次`);
-      const pj=projById(rec.p);if(pj)a.push(pj.name);if(rec.x)a.push('跨日');
+      const pj=projById(rec.p);if(pj)a.push(pj.name);
       if(num(rec.add))a.push(`+${fmt(num(rec.add))}`);if(num(rec.sub))a.push(`−${fmt(num(rec.sub))}`);if(rec.note)a.push(rec.note);
       L.push(`${md(k)}（${'日一二三四五六'[k2d(k).getDay()]}）${a.join('　')}`);
     });
@@ -671,8 +709,8 @@ function exportCSV(rs,p){
   const q=v=>`"${String(v).replace(/"/g,'""')}"`;
   const rows=[[`薪資期間 ${ymd(p.from)}～${ymd(p.to)}`],['員工','日薪（分段）','出勤天數','正班工數','加班次數','加班工數','總工數','工資','加給','預支扣款','實發']];
   rs.forEach(({e,r})=>rows.push([e.name,paySegs(r).map(g=>`${md(g.from)}~${md(g.to)} ${fu(g.units)}工×${g.rate}`).join('；'),r.days,fu(r.work),r.otCount,fu(r.ot),fu(r.units),r.pay,r.add,r.sub,r.total]));
-  rows.push([],['日期','員工','工程','跨日','日薪','正班工數','加班次數','加給','預支扣款','備註']);
-  rs.forEach(({e,r})=>r.list.forEach(({k,rec})=>rows.push([k,e.name,projById(rec.p)?.name??'',rec.x?'是':'',rateOn(e,k),num(rec.w)||'',num(rec.ot)||'',rec.add??'',rec.sub??'',rec.note??''])));
+  rows.push([],['日期','員工','工程','日薪','正班工數','加班次數','加給','預支扣款','備註']);
+  rs.forEach(({e,r})=>r.list.forEach(({k,rec})=>rows.push([k,e.name,projById(rec.p)?.name??'',rateOn(e,k),num(rec.w)||'',num(rec.ot)||'',rec.add??'',rec.sub??'',rec.note??''])));
   download(`薪資出勤_${p.from}_${p.to}.csv`,'﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv;charset=utf-8');
 }
 
@@ -750,7 +788,7 @@ function renderSet(){
 function helpCard(){
   return `<div class="card help"><b>📖 使用說明</b><ol style="padding-left:20px;margin:6px 0 0;font-size:14px">
   <li>到「👥 員工」新增員工，填<b>起薪（日薪）</b>。之後加薪：編輯員工 →「📈 調薪紀錄」填生效日和新日薪，舊的工數照舊日薪算。</li>
-  <li><b>工程安排</b>：「📅 班表」上面切到「🏗️ 工程安排」，先按「管理工程」新增工程（名稱、地點），再到每個工程按「👷 安排人員」。上方 ‹ › 或「今天／明天」換日期，「照前一天安排」一鍵帶入，「💬 LINE 傳派工單」傳到群組。新增工程時填<b>施工期間</b>，「📅 記工」月曆下方會用<b>色帶</b>標出每個工程的日期，工程安排也只列出當天在施工期間的工程。夜間施工做到隔天：在工程填施工時段（例如 22:00～06:00）就會自動標<b>🌙跨日</b>；工數記在開工那天，隔天安排時會提醒誰前晚跨日。只安排不算薪資，勾「同時記 1 工」才會記工。統計頁會列出每個工程用了多少工和人工成本。</li>
+  <li><b>工程安排</b>：「📅 班表」上面切到「🏗️ 工程安排」，先按「管理工程」新增工程（名稱、地點），再到每個工程按「👷 安排人員」。上方 ‹ › 或「今天／明天」換日期，「照前一天安排」一鍵帶入，「💬 LINE 傳派工單」傳到群組。新增工程時設定<b>施工日期</b>：每天都做選「連續施工」填起訖日；隔一天或隔好幾天才去做，選「<b>指定施工日</b>」在小月曆點選日期。「📅 記工」月曆會用<b>色帶</b>標出施工日（沒施工的日子會斷開），工程安排只列出當天要施工的工程；臨時要去，按「📌 這天也要施工」。只安排不算薪資，勾「同時記 1 工」才會記工。統計頁會列出每個工程用了多少工和人工成本。</li>
   <li>到「📅 班表」的「📅 記工」選一位員工，點「<b>1 工</b>」或「<b>0.5 工</b>」，再點日期就記好；再點一次同一個會取消。</li>
   <li>有加班：點「<b>＋加班 0.5 工</b>」再點日期。一天加班不只一次，用「✏️ 詳細」調整次數。</li>
   <li>「平日空白日全記 1 工」可一次記好週一到週五。要填<b>加給、預支／扣款、備註</b>：選「✏️ 詳細」，或在「全部」點日期。</li>

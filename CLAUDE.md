@@ -4,7 +4,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 
 ## 檔案
 - `index.html`：整個 App（HTML＋CSS＋JS 都在這個檔）。
-- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v9`）。
+- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v10`）。
 - `manifest.json`、`icon-*.png`：加入主畫面用。
 - `.nojekyll`：讓 GitHub Pages 直接發布檔案（不要刪）。
 
@@ -22,9 +22,9 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 - 調薪：`rateOn(e,日期)` 取當天日薪；`calc(e,from,to)` 逐日累計，日薪不同就分段（`segs`），統計、CSV、薪資單都分段列出。
 - 薪資單：`slipText()` 產生文字，`slipSheet()` 可修改後用 `https://line.me/R/share?text=` 開 LINE 選聊天室傳送。
 - 畫面：`renderCal()` 班表（按鈕快速記工 `tapDay()`、`dayEditor()` 每日詳細）、`renderStat()` 統計與 CSV 匯出、`renderEmp()`／`editEmp()` 員工與調薪、`renderSet()` 設定（結算日、備份）。
-- 工程安排：`DB.projects＝[{id,name,place,color,note,done,from,to,t1,t2}]`（from～to＝施工期間，to 空白＝未定；t1～t2＝施工時段），某人某天在哪個工程存在 `records[日期][員工id].p`。班表上方切「📅 記工／🏗️ 工程安排」（`S.calMode`）；`renderJobs()` 按日期派工（`S.jd`，標題 ‹ › 換天）、`assignSheet()` 選人、`copyPrevDay()` 照前一天、`dispatchText()` 派工單用 LINE 傳。只安排不算薪資（`calc()` 只看 w／ot）；統計頁 `jobCostCard()` 列各工程的人次、工數、人工成本。
+- 工程安排：`DB.projects＝[{id,name,place,color,note,done,from,to,days}]`（連續施工：from～to，to 空白＝未定；指定施工日：`days` 日期陣列，from／to 自動取頭尾），某人某天在哪個工程存在 `records[日期][員工id].p`。班表上方切「📅 記工／🏗️ 工程安排」（`S.calMode`）；`renderJobs()` 按日期派工（`S.jd`，標題 ‹ › 換天）、`assignSheet()` 選人、`copyPrevDay()` 照前一天、`dispatchText()` 派工單用 LINE 傳。只安排不算薪資（`calc()` 只看 w／ot）；統計頁 `jobCostCard()` 列各工程的人次、工數、人工成本。
 - 工程色帶：`monthLanes()` 幫當月有施工期間的工程分車道（整個月車道數固定，色帶才會對齊），`bandsHtml()` 畫在日曆格底部（最多 `MAX_LANES` 條），`monthProjCard()` 是月曆下方的「本月工程」。工程安排只列當天在期間內的工程（`projActive()`）。
-- 跨日施作（夜間施工做到隔天）：工程的收工時間 t2 ≤ 開工時間 t1 就是跨日（`isOvernight()`）；當天紀錄 `rec.x=1`，工數記在開工那天、照常計薪。安排到跨日工程會自動標 x；隔天安排時 `prevNight()` 提醒「前晚跨日」；月曆、派工單、薪資單、CSV 都會標示。
+- 施工日（使用者說的「跨日」＝隔一天或隔好幾天才去做，不是做到半夜）：`isWorkDay()` 判斷某天是不是施工日；色帶只畫在施工日、中間沒施工的日子斷開；`daysText()` 把日期壓成「10/5、10/7、10/12～10/14」；工程編輯有小月曆點選施工日；工程安排畫面可按「📌 這天也要施工」（`addWorkDay()`，連續施工的工程會轉成指定施工日）。
 - 確認視窗一律用 App 內的 `ask()`，不要用 `confirm`／`alert`／`prompt`。
 
 ## 使用者偏好
