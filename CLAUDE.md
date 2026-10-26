@@ -4,7 +4,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 
 ## 檔案
 - `index.html`：整個 App（HTML＋CSS＋JS 都在這個檔）。
-- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v14`）。
+- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v15`）。
 - `manifest.json`、`icon-*.png`：加入主畫面用。
 - `.nojekyll`：讓 GitHub Pages 直接發布檔案（不要刪）。
 
@@ -25,7 +25,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 - 工程安排：`DB.projects＝[{id,name,place,color,note,done,from,to,days}]`（連續施工：from～to，to 空白＝未定；指定施工日：`days` 日期陣列，from／to 自動取頭尾），某人某天在哪個工程存在 `records[日期][員工id].p`。班表上方切「📅 記工／🏗️ 工程安排」（`S.calMode`）；`renderJobs()` 按日期派工（`S.jd`，標題 ‹ › 換天）、`assignSheet()` 選人、`copyPrevDay()` 照前一天、`dispatchText()` 派工單用 LINE 傳。只安排不算薪資（`calc()` 只看 w／ot）；統計頁 `jobCostCard()` 列各工程的人次、工數、人工成本。
 - 工程色帶：`monthLanes()` 幫當月有施工日的工程分車道（整個月車道數固定，色帶才會對齊），`bandsHtml()` 畫在日曆格底部，連續施工日連成一條、沒施工的日子斷開（使用者要這種，不要每天一顆標籤）；名稱寫在每段開頭與每週日，太長用「…」，只有一天的寫前三個字（最多 `MAX_LANES` 條），`monthProjCard()` 是月曆下方的「本月工程」。工程安排只列當天在期間內的工程（`projActive()`）。
 - 施工日（使用者說的「跨日」＝隔一天或隔好幾天才去做，不是做到半夜）：`isWorkDay()` 判斷某天是不是施工日；色帶只畫在施工日、中間沒施工的日子斷開；`daysText()` 把日期壓成「10/5、10/7、10/12～10/14」；工程編輯有小月曆點選施工日；工程安排畫面可按「📌 這天也要施工」（`addWorkDay()`，連續施工的工程會轉成指定施工日）。
-- 記工月曆顯示開關：`settings.showWork`（記工標記）、`settings.showBands`（按鈕叫「工程安排」：工程色帶＋色帶下一排安排人員小圓圈＋本月工程），預設都顯示，只影響畫面不動資料。
+- 記工月曆顯示開關：`settings.showWork`（記工標記）、`settings.showBands`（按鈕叫「工程安排」：工程色帶＋本月工程；記工關著時色帶下面再用員工顏色圓點表示安排出工的人，記工打開就不畫），預設都顯示，只影響畫面不動資料。
 - 確認視窗一律用 App 內的 `ask()`，不要用 `confirm`／`alert`／`prompt`。
 
 ## 介面風格（v10，使用者給的參考圖）
