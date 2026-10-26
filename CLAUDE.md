@@ -37,11 +37,23 @@ iPhone 用的網頁 App。純靜態網站（只有樣式要用 Tailwind 編譯�
 - 月曆格白底細框圓角，今天＝橘框＋米色底；記工／工程安排與下方分頁列都用線條 SVG 圖示（不用 emoji），選中＝藍色＋底線。
 - 工程預設顏色用參考圖色系 `PROJ_COLORS`（桃紅、藍綠、藍、紫…）。
 
-## UI 視覺規範（v16，使用者指定）
+## UI 視覺規範（v16，使用者指定）——**之後新增的任何功能、畫面、彈出視窗都必須照這套做**
 - HTML＋Tailwind CSS；現代極簡、乾淨、有留白；柔和淺色＋主題色深邃藍（`brand-600～950`），背景與卡片有層次。
 - 卡片、輸入框用 `rounded-xl`＋細緻陰影（`shadow-md`／`shadow-sm`）；按鈕有顏色漸變（hover）與按下縮放（`active:scale`）；輸入框 focus 有藍色光圈（`ring-4 ring-brand-500/15`）。
 - 圖示一律用 Lucide 線條圖示（JS 裡的 `IC`／`ic()` 內嵌 SVG，`.ic` 跟文字對齊），不要用 emoji。
 - 月曆卡片（`.calcard`）左右留白比較小，格子才夠寬放色帶與人員；改月曆內距要一起檢查 `.bands` 的 5.5px 負邊距。
+
+### 新功能檢查清單（做新畫面時照著用，不要自己另寫一套樣式）
+1. **區塊**：用 `.card`（白底、rounded-xl、shadow-md、p-5）；標題用 `<b class="inline-flex items-center gap-1.5">${ic('圖示','text-brand-600')}標題</b>`，說明文字用 `.small`。
+2. **按鈕**：主要動作 `.primary`（深邃藍漸層）、次要 `.secondary`、刪除 `.danger`、LINE 分享 `.line`；按鈕文字前面放 `${ic('…')}`。兩個以上按鈕放 `.row`，要等寬加 `.grow`。
+3. **切換／選項**：二選一用 `.seg`（選中 `.on`）；人或項目用 `.chip`；開關用 `.tog`；清單點選用 `.li`；多選人員用 `.pick`。
+4. **表單**：`<label for>`＋`input/select/textarea`（base 已套 rounded-xl、陰影、focus 光圈），不要寫 inline 的邊框或 outline。
+5. **彈出**：編輯畫面用 `openSheet()`（底部滑出），確認用 `ask()`，提示用 `toast()`；不要用 `confirm`／`alert`／`prompt`。
+6. **數字摘要**：用 `.kpi`（三格）、金額用 `.money`、明細表用 `table.br`。
+7. **圖示**：需要新圖示就把 Lucide 的 SVG path 加進 `IC`，用 `ic('名稱')` 呼叫；不要用 emoji、不要載入外部圖示庫（要能離線）。
+8. **顏色**：用 Tailwind 的 `brand-*`、`slate-*` 或 `:root` 的 CSS 變數（`--navy`、`--blue`、`--muted`、`--line`…），不要寫死新的色碼（員工／工程自選顏色除外）。
+9. **新樣式**：共用的寫進 `src/input.css` 的 `@layer components`（用 `@apply`），一次性的直接在 HTML 用 Tailwind class；改完跑 `npm run build:css`，`app.css` 一起 commit。
+10. **檢查**：iPhone 13 寬度（390）不能左右滑動、文字不超出格子，截圖確認跟現有畫面風格一致再 commit。
 
 ## 使用者偏好
 - 介面與說明一律繁體中文。
