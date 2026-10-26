@@ -75,6 +75,8 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 .de{border:1px solid #e2e8f0;border-radius:12px;padding:8px;margin-top:8px}
 .de .g{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .de .g label{margin:4px 0 2px;font-size:12px}
+.seg{display:flex;gap:6px}.seg button{flex:1;background:#e2e8f0;color:#0f172a}.seg button.on{background:#0f172a;color:white;font-weight:700}
+.step{display:flex;align-items:center;gap:8px}.step button{width:44px;background:#e2e8f0;font-size:20px;padding:0}.step b{min-width:28px;text-align:center;font-size:17px}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#0f172a;color:white;padding:9px 16px;border-radius:999px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .help li{margin:4px 0}
@@ -98,43 +100,47 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 <div class="sheet" id="sheet"></div>
 <div class="toast" id="toast"></div>
 <script>
-const APP_VER='v1（2026-10-26）';
+const APP_VER='v2（2026-10-26）';
 const KEY='salaryBoss.v1';
-const LEAVES=[
-  {id:'rest',name:'休假',short:'休',factor:null,color:'#94a3b8'},
-  {id:'pl',name:'特休',short:'特',factor:1,color:'#16a34a'},
-  {id:'sl',name:'病假',short:'病',factor:.5,color:'#f59e0b'},
-  {id:'ul',name:'事假',short:'事',factor:0,color:'#ef4444'}
-];
-const PAY={hour:'時薪',day:'日薪',month:'月薪'};
+const OT_UNIT=0.5; // 加班一次＝0.5 工
 const COLORS=['#2563eb','#7c3aed','#db2777','#0891b2','#ea580c','#65a30d','#0f766e','#9333ea'];
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{const n=parseFloat(v);return isFinite(n)?n:0;};
 const fmt=n=>Math.round(n).toLocaleString('zh-TW');
-const fh=n=>(Math.round(n*100)/100).toString();
+const fu=n=>(Math.round(n*100)/100).toString();
 const pad=n=>String(n).padStart(2,'0');
 const dkey=(y,m,d)=>`${y}-${pad(m+1)}-${pad(d)}`;
+const wLabel=w=>w===0.5?'½':w===1?'1':'';
 
-function defaults(){
-  return {
-    employees:[],
-    shifts:[
-      {id:'s1',name:'早班',short:'早',time:'08:00-16:00',hours:8,color:'#2563eb'},
-      {id:'s2',name:'中班',short:'中',time:'16:00-24:00',hours:8,color:'#7c3aed'},
-      {id:'s3',name:'夜班',short:'夜',time:'00:00-08:00',hours:8,color:'#0f172a'}
-    ],
-    records:{},
-    settings:{ot1:1.34,ot2:1.67,monthDiv:240,dayHours:8}
-  };
+function defaults(){return {ver:2,employees:[],records:{}};}
+// v1（班別、時薪／月薪）→ v2（工數、只算日薪）
+function migrate(d){
+  if(!d||typeof d!=='object')return defaults();
+  if(d.ver>=2)return Object.assign(defaults(),d);
+  const shifts=d.shifts||[];
+  d.employees=(d.employees||[]).map(e=>({id:e.id,name:e.name,rate:num(e.rate),color:e.color,note:e.note||'',active:e.active!==false}));
+  Object.keys(d.records||{}).forEach(k=>{
+    const day=d.records[k];
+    Object.keys(day).forEach(id=>{
+      const r=day[id],sh=shifts.find(x=>x.id===r.s),out={};
+      if(sh){const h=r.h!==undefined&&r.h!==''?num(r.h):num(sh.hours);out.w=h>0&&h<=4?0.5:1;}
+      if(num(r.ot)>0)out.ot=1;
+      ['add','sub','note'].forEach(f=>{if(r[f]!==undefined&&r[f]!=='')out[f]=r[f];});
+      if(out.w||out.ot)day[id]=out;else delete day[id];
+    });
+    if(!Object.keys(day).length)delete d.records[k];
+  });
+  return {ver:2,employees:d.employees,records:d.records||{}};
 }
 let DB;
 try{DB=JSON.parse(localStorage.getItem(KEY))||defaults();}catch(e){DB=defaults();}
-DB=Object.assign(defaults(),DB);DB.settings=Object.assign(defaults().settings,DB.settings);
+DB=migrate(DB);
 function save(){try{localStorage.setItem(KEY,JSON.stringify(DB));}catch(e){toast('⚠️ 無法儲存到這台裝置');}}
+save();
 
 const now=new Date();
-const S={tab:'cal',y:now.getFullYear(),m:now.getMonth(),emp:'all',brush:null};
+const S={tab:'cal',y:now.getFullYear(),m:now.getMonth(),emp:'all',brush:'1'};
 try{const t=sessionStorage.getItem('salaryTab');if(t)S.tab=t;}catch(e){}
 
 const $=id=>document.getElementById(id);
@@ -145,45 +151,21 @@ $('mask').onclick=closeSheet;
 
 const activeEmps=()=>DB.employees.filter(e=>e.active!==false);
 const empById=id=>DB.employees.find(e=>e.id===id);
-function kindOf(s){return DB.shifts.find(x=>x.id===s)||LEAVES.find(x=>x.id===s)||null;}
-const isLeave=s=>LEAVES.some(l=>l.id===s);
 const daysIn=(y,m)=>new Date(y,m+1,0).getDate();
 
-// ===== 薪資計算 =====
-function hourRate(e){
-  const st=DB.settings;
-  if(e.pay==='hour')return num(e.rate);
-  if(e.pay==='day')return num(e.rate)/(num(st.dayHours)||8);
-  return num(e.rate)/(num(st.monthDiv)||240);
-}
-function otPay(ot,hr){const st=DB.settings;return Math.min(ot,2)*hr*num(st.ot1)+Math.max(ot-2,0)*hr*num(st.ot2);}
+// ===== 薪資計算：總工數 × 日薪 =====
 function calc(e,y,m){
-  const st=DB.settings,hr=hourRate(e),dh=num(st.dayHours)||8,n=daysIn(y,m);
-  const r={days:0,hours:0,ot:0,base:0,otPay:0,add:0,sub:0,leave:{rest:0,pl:0,sl:0,ul:0},list:[]};
-  let leavePay=0,leaveDeduct=0;
-  for(let d=1;d<=n;d++){
-    const rec=(DB.records[dkey(y,m,d)]||{})[e.id];if(!rec||!rec.s)continue;
-    const k=kindOf(rec.s);if(!k)continue;
-    const ot=num(rec.ot),add=num(rec.add),sub=num(rec.sub);
-    r.add+=add;r.sub+=sub;
-    if(isLeave(rec.s)){
-      r.leave[rec.s]++;
-      if(k.factor!=null){
-        if(e.pay==='month')leaveDeduct+=num(e.rate)/30*(1-k.factor);
-        else if(e.pay==='day')leavePay+=num(e.rate)*k.factor;
-        else leavePay+=dh*num(e.rate)*k.factor;
-      }
-    }else{
-      const h=rec.h!==undefined&&rec.h!==''?num(rec.h):num(k.hours);
-      r.days++;r.hours+=h;r.ot+=ot;r.otPay+=otPay(ot,hr);
-    }
-    r.list.push({d,k,rec});
+  const r={days:0,work:0,otCount:0,ot:0,units:0,pay:0,add:0,sub:0,list:[]};
+  for(let d=1;d<=daysIn(y,m);d++){
+    const rec=(DB.records[dkey(y,m,d)]||{})[e.id];if(!rec)continue;
+    const w=num(rec.w),oc=num(rec.ot);
+    if(w>0)r.days++;
+    r.work+=w;r.otCount+=oc;r.add+=num(rec.add);r.sub+=num(rec.sub);
+    r.list.push({d,rec});
   }
-  if(e.pay==='hour')r.base=r.hours*num(e.rate)+leavePay;
-  else if(e.pay==='day')r.base=r.days*num(e.rate)+leavePay;
-  else r.base=num(e.rate)-leaveDeduct;
-  r.base=Math.round(r.base);r.otPay=Math.round(r.otPay);
-  r.total=r.base+r.otPay+r.add-r.sub;
+  r.ot=r.otCount*OT_UNIT;r.units=r.work+r.ot;
+  r.pay=Math.round(r.units*num(e.rate));
+  r.total=r.pay+r.add-r.sub;
   return r;
 }
 
@@ -197,6 +179,13 @@ function shiftMonth(dm){S.m+=dm;if(S.m<0){S.m=11;S.y--;}if(S.m>11){S.m=0;S.y++;}
 $('prevM').onclick=()=>shiftMonth(-1);$('nextM').onclick=()=>shiftMonth(1);
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;try{sessionStorage.setItem('salaryTab',S.tab);}catch(e){}window.scrollTo(0,0);render();});
 
+const BRUSHES=[
+  {id:'1',name:'1 工',color:'#2563eb'},
+  {id:'0.5',name:'0.5 工',color:'#0891b2'},
+  {id:'ot',name:'＋加班 0.5 工',color:'#ea580c'},
+  {id:'clr',name:'🧽 清除',color:'#94a3b8'},
+  {id:'edit',name:'✏️ 詳細',color:'#475569'}
+];
 function renderCal(){
   const emps=activeEmps();
   if(S.emp!=='all'&&!emps.some(e=>e.id===S.emp))S.emp='all';
@@ -205,11 +194,10 @@ function renderCal(){
   emps.forEach(e=>h+=`<button class="chip ${S.emp===e.id?'on':''}" data-emp="${e.id}"><span class="dot" style="display:inline-block;background:${e.color};margin-right:4px;vertical-align:-1px"></span>${esc(e.name)}</button>`);
   h+='</div>';
   if(S.emp!=='all'){
-    h+=`<div class="small" style="margin:8px 0 4px">選一個班別，再點日期就能快速排班（再點一次同班別＝清除）：</div><div class="chips">`;
-    [...DB.shifts,...LEAVES].forEach(k=>h+=`<button class="brush ${S.brush===k.id?'on':''}" style="background:${k.color}" data-brush="${k.id}">${esc(k.name)}</button>`);
-    h+=`<button class="brush ${S.brush==='edit'?'on':''}" style="background:#475569" data-brush="edit">✏️ 詳細</button></div>
-    <div class="row" style="margin-top:8px"><button class="secondary grow" id="fillWk">套用到平日空白日</button><button class="danger" id="clrM">清空本月</button></div>`;
-  }else h+=`<div class="small" style="margin-top:6px">點日期可設定每位員工當天的班別、加班時數。選上方員工可用「畫筆」快速排班。</div>`;
+    h+=`<div class="small" style="margin:8px 0 4px">選一個按鈕，再點日期記工（再點一次同樣的＝取消）：</div><div class="chips" style="flex-wrap:wrap">`;
+    BRUSHES.forEach(k=>h+=`<button class="brush ${S.brush===k.id?'on':''}" style="background:${k.color}" data-brush="${k.id}">${k.name}</button>`);
+    h+=`</div><div class="row" style="margin-top:8px"><button class="secondary grow" id="fillWk">平日空白日全記 1 工</button><button class="danger" id="clrM">清空本月</button></div>`;
+  }else h+=`<div class="small" style="margin-top:6px">點日期可一次記所有員工當天的工數與加班。選上方員工可用按鈕快速記工。</div>`;
   h+='</div><div class="card"><div class="cal">';
   ['日','一','二','三','四','五','六'].forEach((w,i)=>h+=`<div class="wd ${i===0?'sun':i===6?'sat':''}">${w}</div>`);
   const first=new Date(S.y,S.m,1).getDay(),n=daysIn(S.y,S.m),tk=dkey(now.getFullYear(),now.getMonth(),now.getDate());
@@ -218,13 +206,13 @@ function renderCal(){
     const key=dkey(S.y,S.m,d),day=DB.records[key]||{},wd=(first+d-1)%7;
     let inner='';
     if(S.emp==='all'){
-      const on=emps.filter(e=>day[e.id]&&day[e.id].s);
-      const work=on.filter(e=>!isLeave(day[e.id].s)).length;
-      inner=`<div class="dots">${on.map(e=>isLeave(day[e.id].s)?`<i style="border:2px solid ${e.color}"></i>`:`<i style="background:${e.color}"></i>`).join('')}</div>`+(work?`<div class="cnt">${work}人</div>`:'');
+      const on=emps.filter(e=>day[e.id]);
+      const units=on.reduce((a,e)=>a+num(day[e.id].w)+num(day[e.id].ot)*OT_UNIT,0);
+      inner=`<div class="dots">${on.map(e=>`<i style="background:${e.color}"></i>`).join('')}</div>`+(units?`<div class="cnt">${fu(units)}工</div>`:'');
     }else{
-      const rec=day[S.emp];const k=rec&&kindOf(rec.s);
-      if(k)inner=`<div class="tag" style="background:${k.color}">${esc(k.short||k.name)}</div>`;
-      if(rec&&num(rec.ot))inner+=`<div class="ot">+${fh(num(rec.ot))}h</div>`;
+      const rec=day[S.emp];
+      if(rec&&num(rec.w))inner=`<div class="tag" style="background:${num(rec.w)===1?'#2563eb':'#0891b2'}">${wLabel(num(rec.w))} 工</div>`;
+      if(rec&&num(rec.ot))inner+=`<div class="ot">+加${num(rec.ot)>1?'×'+num(rec.ot):''}</div>`;
       if(rec&&(num(rec.add)||num(rec.sub)||rec.note))inner+=`<div class="cnt">•</div>`;
     }
     h+=`<div class="d ${wd===0?'sun':wd===6?'sat':''} ${key===tk?'today':''}" data-day="${d}"><div class="n">${d}</div>${inner}</div>`;
@@ -232,37 +220,43 @@ function renderCal(){
   h+='</div></div>';
   if(S.emp!=='all'){
     const e=empById(S.emp),r=calc(e,S.y,S.m);
-    h+=`<div class="card"><div class="kpi"><div><b>${r.days}</b><small>出勤天數</small></div><div><b>${fh(r.ot)}</b><small>加班時數</small></div><div><b>${fmt(r.total)}</b><small>本月薪資</small></div></div></div>`;
+    h+=`<div class="card"><div class="kpi"><div><b>${r.days}</b><small>出勤天數</small></div><div><b>${fu(r.units)}</b><small>總工數</small></div><div><b>${fmt(r.total)}</b><small>本月薪資</small></div></div></div>`;
   }
   $('view').innerHTML=h;
-  document.querySelectorAll('[data-emp]').forEach(b=>b.onclick=()=>{S.emp=b.dataset.emp;if(S.emp!=='all'&&!S.brush)S.brush=(empById(S.emp).defShift)||DB.shifts[0]?.id||'edit';render();});
+  document.querySelectorAll('[data-emp]').forEach(b=>b.onclick=()=>{S.emp=b.dataset.emp;render();});
   document.querySelectorAll('[data-brush]').forEach(b=>b.onclick=()=>{S.brush=b.dataset.brush;render();});
   document.querySelectorAll('.cal .d[data-day]').forEach(c=>c.onclick=()=>tapDay(+c.dataset.day));
   if($('fillWk'))$('fillWk').onclick=fillWeekdays;
   if($('clrM'))$('clrM').onclick=clearMonth;
 }
+function clean(rec){
+  if(!rec)return null;
+  Object.keys(rec).forEach(k=>{if(rec[k]===''||rec[k]===0||rec[k]===undefined)delete rec[k];});
+  return Object.keys(rec).length?rec:null;
+}
 function setRec(key,empId,rec){
+  rec=clean(rec);
   DB.records[key]=DB.records[key]||{};
   if(rec)DB.records[key][empId]=rec;else delete DB.records[key][empId];
   if(!Object.keys(DB.records[key]).length)delete DB.records[key];
 }
 function tapDay(d){
   const key=dkey(S.y,S.m,d);
-  if(S.emp==='all'||S.brush==='edit'||!S.brush)return dayEditor(d);
-  const cur=(DB.records[key]||{})[S.emp];
-  if(cur&&cur.s===S.brush){setRec(key,S.emp,null);}
-  else setRec(key,S.emp,Object.assign({},cur||{},{s:S.brush}));
+  if(S.emp==='all'||S.brush==='edit')return dayEditor(d);
+  const cur=Object.assign({},(DB.records[key]||{})[S.emp]||{});
+  if(S.brush==='clr')setRec(key,S.emp,null);
+  else if(S.brush==='ot'){cur.ot=num(cur.ot)?0:1;setRec(key,S.emp,cur);}
+  else{const w=num(S.brush);cur.w=num(cur.w)===w?0:w;setRec(key,S.emp,cur);}
   save();render();
 }
 function fillWeekdays(){
-  const k=kindOf(S.brush);if(!k){toast('請先選一個班別');return;}
-  let c=0;const n=daysIn(S.y,S.m);
-  for(let d=1;d<=n;d++){const wd=new Date(S.y,S.m,d).getDay();if(wd===0||wd===6)continue;
-    const key=dkey(S.y,S.m,d);if((DB.records[key]||{})[S.emp])continue;setRec(key,S.emp,{s:S.brush});c++;}
-  save();render();toast(`已套用「${k.name}」${c} 天`);
+  let c=0;
+  for(let d=1;d<=daysIn(S.y,S.m);d++){const wd=new Date(S.y,S.m,d).getDay();if(wd===0||wd===6)continue;
+    const key=dkey(S.y,S.m,d);if((DB.records[key]||{})[S.emp])continue;setRec(key,S.emp,{w:1});c++;}
+  save();render();toast(`已記 ${c} 天，每天 1 工`);
 }
 function clearMonth(){
-  const e=empById(S.emp);if(!confirm(`清空 ${e.name} 在 ${S.y}年${S.m+1}月 的所有班表？`))return;
+  const e=empById(S.emp);if(!confirm(`清空 ${e.name} 在 ${S.y}年${S.m+1}月 的所有紀錄？`))return;
   for(let d=1;d<=daysIn(S.y,S.m);d++)setRec(dkey(S.y,S.m,d),S.emp,null);
   save();render();toast('已清空');
 }
@@ -270,25 +264,31 @@ function dayEditor(d){
   const key=dkey(S.y,S.m,d),day=DB.records[key]||{};
   const emps=S.emp==='all'?activeEmps():[empById(S.emp)];
   const wd='日一二三四五六'[new Date(S.y,S.m,d).getDay()];
-  let h=`<h2>${S.m+1}月${d}日（${wd}）</h2><div class="small">工時留空＝用班別的預設時數。加班費：前 2 小時 ×${DB.settings.ot1}，之後 ×${DB.settings.ot2}。</div>`;
+  let h=`<h2>${S.m+1}月${d}日（${wd}）</h2><div class="small">1 工＝1 天日薪；加班每次 0.5 工。</div>`;
   emps.forEach(e=>{
-    const r=day[e.id]||{};
-    h+=`<div class="de" data-e="${e.id}"><div class="emp-h"><span class="dot" style="background:${e.color}"></span><b class="grow">${esc(e.name)}</b><span class="small">${PAY[e.pay]} ${fmt(num(e.rate))}</span></div>
-    <label>班別</label><select data-f="s"><option value="">— 未排班 —</option>
-    <optgroup label="上班">${DB.shifts.map(k=>`<option value="${k.id}" ${r.s===k.id?'selected':''}>${esc(k.name)}（${fh(num(k.hours))}h）</option>`).join('')}</optgroup>
-    <optgroup label="休假／請假">${LEAVES.map(k=>`<option value="${k.id}" ${r.s===k.id?'selected':''}>${k.name}</option>`).join('')}</optgroup></select>
-    <div class="g"><div><label>實際工時</label><input data-f="h" type="number" inputmode="decimal" step="0.5" value="${esc(r.h??'')}" placeholder="預設"></div>
-    <div><label>加班時數</label><input data-f="ot" type="number" inputmode="decimal" step="0.5" value="${esc(r.ot??'')}" placeholder="0"></div>
-    <div><label>加給／獎金（元）</label><input data-f="add" type="number" inputmode="numeric" value="${esc(r.add??'')}" placeholder="0"></div>
-    <div><label>扣款（元）</label><input data-f="sub" type="number" inputmode="numeric" value="${esc(r.sub??'')}" placeholder="0"></div></div>
-    <label>備註</label><input data-f="note" value="${esc(r.note??'')}" placeholder="例如：國定假日加倍"></div>`;
+    const r=day[e.id]||{},w=num(r.w);
+    h+=`<div class="de" data-e="${e.id}" data-w="${w}" data-ot="${num(r.ot)}"><div class="emp-h"><span class="dot" style="background:${e.color}"></span><b class="grow">${esc(e.name)}</b><span class="small">日薪 ${fmt(num(e.rate))}</span></div>
+    <label>正班</label><div class="seg">${[[0,'沒上班'],[0.5,'0.5 工'],[1,'1 工']].map(([v,t])=>`<button type="button" data-wv="${v}" class="${w===v?'on':''}">${t}</button>`).join('')}</div>
+    <label>加班（每次 0.5 工）</label><div class="step"><button type="button" data-otd="-1">−</button><b data-otn>${num(r.ot)}</b><button type="button" data-otd="1">＋</button><span class="small" data-otu>次＝${fu(num(r.ot)*OT_UNIT)} 工</span></div>
+    <div class="g"><div><label>加給／獎金（元）</label><input data-f="add" type="number" inputmode="numeric" value="${esc(r.add??'')}" placeholder="0"></div>
+    <div><label>預支／扣款（元）</label><input data-f="sub" type="number" inputmode="numeric" value="${esc(r.sub??'')}" placeholder="0"></div></div>
+    <label>備註</label><input data-f="note" value="${esc(r.note??'')}" placeholder="例如：工地名稱"></div>`;
   });
   h+=`<div class="row" style="margin-top:12px"><button class="secondary grow" onclick="closeSheet()">取消</button><button class="primary grow" id="dSave">儲存</button></div>`;
   openSheet(h);
+  document.querySelectorAll('#sheet .de').forEach(box=>{
+    box.querySelectorAll('[data-wv]').forEach(b=>b.onclick=()=>{box.dataset.w=b.dataset.wv;box.querySelectorAll('[data-wv]').forEach(x=>x.classList.toggle('on',x===b));});
+    const step=box.querySelector('.step');
+    step.querySelectorAll('[data-otd]').forEach(b=>b.onclick=()=>{
+      const v=Math.max(0,num(box.dataset.ot)+num(b.dataset.otd));box.dataset.ot=v;
+      box.querySelector('[data-otn]').textContent=v;box.querySelector('[data-otu]').textContent=`次＝${fu(v*OT_UNIT)} 工`;
+    });
+  });
   $('dSave').onclick=()=>{
     document.querySelectorAll('#sheet .de').forEach(box=>{
-      const rec={};box.querySelectorAll('[data-f]').forEach(i=>{const v=i.value.trim();if(v!=='')rec[i.dataset.f]=v;});
-      setRec(key,box.dataset.e,rec.s?rec:null);
+      const rec={w:num(box.dataset.w),ot:num(box.dataset.ot)};
+      box.querySelectorAll('[data-f]').forEach(i=>{const v=i.value.trim();if(v!=='')rec[i.dataset.f]=v;});
+      setRec(key,box.dataset.e,rec);
     });
     save();closeSheet();render();toast('已儲存');
   };
@@ -298,22 +298,21 @@ function renderStat(){
   const emps=DB.employees.filter(e=>e.active!==false||calc(e,S.y,S.m).list.length);
   if(!emps.length){$('view').innerHTML='<div class="card empty">還沒有員工資料。</div>';return;}
   const rs=emps.map(e=>({e,r:calc(e,S.y,S.m)}));
-  const tot=rs.reduce((a,x)=>a+x.r.total,0),pd=rs.reduce((a,x)=>a+x.r.days,0),ot=rs.reduce((a,x)=>a+x.r.ot,0);
-  let h=`<div class="card"><div class="kpi"><div><b>${fmt(tot)}</b><small>薪資總支出</small></div><div><b>${pd}</b><small>總出勤人天</small></div><div><b>${fh(ot)}</b><small>總加班時數</small></div></div>
+  const tot=rs.reduce((a,x)=>a+x.r.total,0),un=rs.reduce((a,x)=>a+x.r.units,0),ot=rs.reduce((a,x)=>a+x.r.ot,0);
+  let h=`<div class="card"><div class="kpi"><div><b>${fmt(tot)}</b><small>薪資總支出</small></div><div><b>${fu(un)}</b><small>總工數</small></div><div><b>${fu(ot)}</b><small>加班工數</small></div></div>
   <div class="row" style="margin-top:10px"><button class="secondary grow" id="csv">📄 匯出 Excel（CSV）</button><button class="secondary grow" id="cp">📋 複製文字</button></div></div>`;
   rs.forEach(({e,r})=>{
-    const lv=LEAVES.filter(l=>r.leave[l.id]).map(l=>`${l.name}${r.leave[l.id]}`).join('、')||'無';
     h+=`<div class="card"><div class="emp-h"><span class="dot" style="background:${e.color}"></span><b class="grow">${esc(e.name)}</b><span class="money">$${fmt(r.total)}</span></div>
-    <div class="small" style="margin-top:4px">${PAY[e.pay]} ${fmt(num(e.rate))}・出勤 ${r.days} 天・工時 ${fh(r.hours)}h・加班 ${fh(r.ot)}h・${lv}</div>
-    <table class="br"><tr><td>${e.pay==='month'?'月薪（扣除請假）':e.pay==='day'?'日薪 × 出勤天數（含有薪假）':'時薪 × 工時（含有薪假）'}</td><td>${fmt(r.base)}</td></tr>
-    <tr><td>加班費</td><td>${fmt(r.otPay)}</td></tr><tr><td>加給／獎金</td><td>${fmt(r.add)}</td></tr><tr><td>扣款</td><td>${r.sub?'−'+fmt(r.sub):0}</td></tr>
+    <div class="small" style="margin-top:4px">日薪 ${fmt(num(e.rate))}・出勤 ${r.days} 天・正班 ${fu(r.work)} 工・加班 ${r.otCount} 次（${fu(r.ot)} 工）</div>
+    <table class="br"><tr><td>總工數 ${fu(r.units)} 工 × 日薪 ${fmt(num(e.rate))}</td><td>${fmt(r.pay)}</td></tr>
+    <tr><td>加給／獎金</td><td>${fmt(r.add)}</td></tr><tr><td>預支／扣款</td><td>${r.sub?'−'+fmt(r.sub):0}</td></tr>
     <tr class="sum"><td>實發</td><td>${fmt(r.total)}</td></tr></table>
-    <details><summary>每日明細（${r.list.length} 筆）</summary><div class="daylist">${r.list.map(({d,k,rec})=>`<div><span>${S.m+1}/${d} ${esc(k.name)}${num(rec.ot)?` 加班${fh(num(rec.ot))}h`:''}${rec.note?`（${esc(rec.note)}）`:''}</span><span>${num(rec.add)?'+'+fmt(num(rec.add)):''}${num(rec.sub)?' −'+fmt(num(rec.sub)):''}</span></div>`).join('')||'<div>本月沒有紀錄</div>'}</div></details></div>`;
+    <details><summary>每日明細（${r.list.length} 筆）</summary><div class="daylist">${r.list.map(({d,rec})=>`<div><span>${S.m+1}/${d} ${num(rec.w)?fu(num(rec.w))+' 工':''}${num(rec.ot)?` 加班${num(rec.ot)}次`:''}${rec.note?`（${esc(rec.note)}）`:''}</span><span>${num(rec.add)?'+'+fmt(num(rec.add)):''}${num(rec.sub)?' −'+fmt(num(rec.sub)):''}</span></div>`).join('')||'<div>本月沒有紀錄</div>'}</div></details></div>`;
   });
   $('view').innerHTML=h;
   $('csv').onclick=()=>exportCSV(rs);
   $('cp').onclick=()=>{
-    const t=`${S.y}年${S.m+1}月 薪資統計\n`+rs.map(({e,r})=>`${e.name}：出勤${r.days}天、加班${fh(r.ot)}h、實發 ${fmt(r.total)} 元`).join('\n')+`\n合計：${fmt(tot)} 元`;
+    const t=`${S.y}年${S.m+1}月 薪資統計\n`+rs.map(({e,r})=>`${e.name}：出勤${r.days}天、共${fu(r.units)}工（加班${fu(r.ot)}工）、實發 ${fmt(r.total)} 元`).join('\n')+`\n合計：${fmt(tot)} 元`;
     (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('已複製'),()=>{prompt('請手動複製：',t);});
   };
 }
@@ -326,39 +325,37 @@ function download(name,text,type){
 }
 function exportCSV(rs){
   const q=v=>`"${String(v).replace(/"/g,'""')}"`;
-  const rows=[['員工','計薪方式','金額','出勤天數','工時','加班時數','特休','病假','事假','休假','基本薪資','加班費','加給','扣款','實發']];
-  rs.forEach(({e,r})=>rows.push([e.name,PAY[e.pay],num(e.rate),r.days,fh(r.hours),fh(r.ot),r.leave.pl,r.leave.sl,r.leave.ul,r.leave.rest,r.base,r.otPay,r.add,r.sub,r.total]));
-  rows.push([],['日期','員工','班別','工時','加班時數','加給','扣款','備註']);
-  rs.forEach(({e,r})=>r.list.forEach(({d,k,rec})=>rows.push([dkey(S.y,S.m,d),e.name,k.name,isLeave(rec.s)?'':(rec.h??k.hours),rec.ot??'',rec.add??'',rec.sub??'',rec.note??''])));
+  const rows=[['員工','日薪','出勤天數','正班工數','加班次數','加班工數','總工數','工資','加給','預支扣款','實發']];
+  rs.forEach(({e,r})=>rows.push([e.name,num(e.rate),r.days,fu(r.work),r.otCount,fu(r.ot),fu(r.units),r.pay,r.add,r.sub,r.total]));
+  rows.push([],['日期','員工','正班工數','加班次數','加給','預支扣款','備註']);
+  rs.forEach(({e,r})=>r.list.forEach(({d,rec})=>rows.push([dkey(S.y,S.m,d),e.name,num(rec.w)||'',num(rec.ot)||'',rec.add??'',rec.sub??'',rec.note??''])));
   download(`薪資出勤_${S.y}-${pad(S.m+1)}.csv`,'﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv;charset=utf-8');
 }
 
 function renderEmp(){
   let h=`<div class="card"><button class="primary" style="width:100%" onclick="editEmp()">＋ 新增員工</button></div><div class="card">`;
   if(!DB.employees.length)h+='<div class="empty">還沒有員工</div>';
-  DB.employees.forEach(e=>h+=`<div class="li" data-id="${e.id}"><span class="dot" style="background:${e.color}"></span><div class="grow"><b>${esc(e.name)}</b>${e.active===false?' <span class="small">（已離職）</span>':''}<div class="small">${PAY[e.pay]} ${fmt(num(e.rate))} 元${e.note?'・'+esc(e.note):''}</div></div><span class="small">編輯 ›</span></div>`);
+  DB.employees.forEach(e=>h+=`<div class="li" data-id="${e.id}"><span class="dot" style="background:${e.color}"></span><div class="grow"><b>${esc(e.name)}</b>${e.active===false?' <span class="small">（已離職）</span>':''}<div class="small">日薪 ${fmt(num(e.rate))} 元${e.note?'・'+esc(e.note):''}</div></div><span class="small">編輯 ›</span></div>`);
   $('view').innerHTML=h+'</div>';
   document.querySelectorAll('.li[data-id]').forEach(li=>li.onclick=()=>editEmp(li.dataset.id));
 }
 function editEmp(id){
-  const e=id?empById(id):{id:uid(),name:'',pay:'hour',rate:'',color:COLORS[DB.employees.length%COLORS.length],active:true,defShift:DB.shifts[0]?.id||''};
+  const e=id?empById(id):{id:uid(),name:'',rate:'',color:COLORS[DB.employees.length%COLORS.length],active:true};
   openSheet(`<h2>${id?'編輯員工':'新增員工'}</h2>
   <label>姓名</label><input id="eName" value="${esc(e.name)}" placeholder="例如：王小明">
-  <div class="row"><div class="grow"><label>計薪方式</label><select id="ePay">${Object.entries(PAY).map(([k,v])=>`<option value="${k}" ${e.pay===k?'selected':''}>${v}</option>`).join('')}</select></div>
-  <div class="grow"><label>金額（元）</label><input id="eRate" type="number" inputmode="numeric" value="${esc(e.rate)}" placeholder="例如：190"></div></div>
-  <div class="row"><div class="grow"><label>預設班別（畫筆）</label><select id="eDef">${DB.shifts.map(k=>`<option value="${k.id}" ${e.defShift===k.id?'selected':''}>${esc(k.name)}</option>`).join('')}</select></div>
+  <div class="row"><div class="grow"><label>日薪（元，1 工的工資）</label><input id="eRate" type="number" inputmode="numeric" value="${esc(e.rate)}" placeholder="例如：2000"></div>
   <div style="width:80px"><label>顏色</label><input id="eColor" type="color" value="${e.color}"></div></div>
   <label>備註</label><input id="eNote" value="${esc(e.note||'')}" placeholder="電話、職稱…">
   <label style="margin-top:12px"><input type="checkbox" id="eAct" ${e.active!==false?'checked':''}>在職（取消勾選＝離職，不會出現在班表）</label>
   <div class="row" style="margin-top:12px">${id?'<button class="danger" id="eDel">刪除</button>':''}<button class="secondary grow" onclick="closeSheet()">取消</button><button class="primary grow" id="eSave">儲存</button></div>`);
   $('eSave').onclick=()=>{
     const name=$('eName').value.trim();if(!name){toast('請輸入姓名');return;}
-    Object.assign(e,{name,pay:$('ePay').value,rate:num($('eRate').value),defShift:$('eDef').value,color:$('eColor').value,note:$('eNote').value.trim(),active:$('eAct').checked});
+    Object.assign(e,{name,rate:num($('eRate').value),color:$('eColor').value,note:$('eNote').value.trim(),active:$('eAct').checked});
     if(!id)DB.employees.push(e);
     save();closeSheet();render();toast('已儲存');
   };
   if(id)$('eDel').onclick=()=>{
-    if(!confirm(`刪除「${e.name}」以及他所有的班表紀錄？（只是離職的話，取消「在職」即可）`))return;
+    if(!confirm(`刪除「${e.name}」以及他所有的紀錄？（只是離職的話，取消「在職」即可）`))return;
     DB.employees=DB.employees.filter(x=>x.id!==id);
     Object.keys(DB.records).forEach(k=>{delete DB.records[k][id];if(!Object.keys(DB.records[k]).length)delete DB.records[k];});
     if(S.emp===id)S.emp='all';
@@ -367,58 +364,30 @@ function editEmp(id){
 }
 
 function renderSet(){
-  const st=DB.settings;
-  let h=`<div class="card"><b>班別</b><div class="small">上班的班別與預設工時。</div>`;
-  DB.shifts.forEach(k=>h+=`<div class="li" data-sid="${k.id}"><span class="tag" style="background:${k.color}">${esc(k.short)}</span><div class="grow"><b>${esc(k.name)}</b><div class="small">${esc(k.time||'')} ${fh(num(k.hours))} 小時</div></div><span class="small">編輯 ›</span></div>`);
-  h+=`<button class="secondary" style="width:100%;margin-top:8px" onclick="editShift()">＋ 新增班別</button></div>
-  <div class="card"><b>計算規則</b>
-  <div class="row"><div class="grow"><label>加班前 2 小時倍率</label><input id="sOt1" type="number" inputmode="decimal" step="0.01" value="${st.ot1}"></div><div class="grow"><label>第 3 小時起倍率</label><input id="sOt2" type="number" inputmode="decimal" step="0.01" value="${st.ot2}"></div></div>
-  <div class="row"><div class="grow"><label>月薪換算時薪（÷）</label><input id="sDiv" type="number" inputmode="numeric" value="${st.monthDiv}"></div><div class="grow"><label>一天標準工時</label><input id="sDh" type="number" inputmode="decimal" value="${st.dayHours}"></div></div>
-  <div class="small" style="margin-top:6px">請假：特休照付、病假付半薪、事假不支薪；月薪者請假以「月薪÷30」為一天扣款。休假不計薪也不扣款。</div>
-  <button class="primary" style="width:100%;margin-top:8px" id="sSave">儲存規則</button></div>
+  let h=`<div class="card"><b>計算方式</b><div class="small" style="margin-top:4px;font-size:14px;color:#334155">每天記 <b>0.5 工</b> 或 <b>1 工</b>，每次加班 <b>＋0.5 工</b>。<br>薪資＝總工數 × 日薪＋加給－預支／扣款。</div></div>
   <div class="card"><b>備份</b><div class="small">資料只存在這支手機的瀏覽器裡，換手機或清除瀏覽器資料前請先備份。</div>
   <div class="row" style="margin-top:8px"><button class="secondary grow" id="bkOut">⬇️ 匯出備份</button><button class="secondary grow" id="bkIn">⬆️ 匯入備份</button></div>
   <input type="file" id="bkFile" accept=".json,application/json" style="display:none">
   <button class="danger" style="width:100%;margin-top:8px" id="wipe">清除全部資料</button></div>`+helpCard()+`<div class="small" style="text-align:center;margin:8px 0">App 版本：${APP_VER}</div>`;
   $('view').innerHTML=h;
-  document.querySelectorAll('[data-sid]').forEach(li=>li.onclick=()=>editShift(li.dataset.sid));
-  $('sSave').onclick=()=>{Object.assign(st,{ot1:num($('sOt1').value)||1.34,ot2:num($('sOt2').value)||1.67,monthDiv:num($('sDiv').value)||240,dayHours:num($('sDh').value)||8});save();render();toast('已儲存');};
   $('bkOut').onclick=()=>download(`薪資出勤備份_${dkey(now.getFullYear(),now.getMonth(),now.getDate())}.json`,JSON.stringify(DB,null,1),'application/json');
   $('bkIn').onclick=()=>$('bkFile').click();
   $('bkFile').onchange=ev=>{
     const f=ev.target.files[0];if(!f)return;const rd=new FileReader();
     rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!d||!Array.isArray(d.employees))throw 0;
       if(!confirm('匯入會取代目前所有資料，確定？'))return;
-      DB=Object.assign(defaults(),d);DB.settings=Object.assign(defaults().settings,d.settings);save();render();toast('已匯入');}catch(e){alert('檔案格式不正確');}};
+      DB=migrate(d);save();render();toast('已匯入');}catch(e){alert('檔案格式不正確');}};
     rd.readAsText(f);
   };
-  $('wipe').onclick=()=>{if(confirm('確定清除所有員工、班表與設定？')&&confirm('真的要清除嗎？無法復原。')){DB=defaults();save();S.emp='all';render();toast('已清除');}};
-}
-function editShift(id){
-  const k=id?DB.shifts.find(x=>x.id===id):{id:uid(),name:'',short:'',time:'',hours:8,color:COLORS[(DB.shifts.length+3)%COLORS.length]};
-  openSheet(`<h2>${id?'編輯班別':'新增班別'}</h2>
-  <div class="row"><div class="grow"><label>名稱</label><input id="kName" value="${esc(k.name)}" placeholder="例如：早班"></div><div style="width:90px"><label>簡稱</label><input id="kShort" value="${esc(k.short)}" maxlength="2" placeholder="早"></div></div>
-  <div class="row"><div class="grow"><label>時段（顯示用）</label><input id="kTime" value="${esc(k.time||'')}" placeholder="08:00-16:00"></div><div style="width:110px"><label>工時（小時）</label><input id="kHours" type="number" inputmode="decimal" step="0.5" value="${k.hours}"></div></div>
-  <label>顏色</label><input id="kColor" type="color" value="${k.color}">
-  <div class="row" style="margin-top:12px">${id?'<button class="danger" id="kDel">刪除</button>':''}<button class="secondary grow" onclick="closeSheet()">取消</button><button class="primary grow" id="kSave">儲存</button></div>`);
-  $('kSave').onclick=()=>{
-    const name=$('kName').value.trim();if(!name){toast('請輸入名稱');return;}
-    Object.assign(k,{name,short:$('kShort').value.trim()||name.slice(0,1),time:$('kTime').value.trim(),hours:num($('kHours').value),color:$('kColor').value});
-    if(!id)DB.shifts.push(k);save();closeSheet();render();toast('已儲存');
-  };
-  if(id)$('kDel').onclick=()=>{
-    const used=Object.values(DB.records).some(day=>Object.values(day).some(r=>r.s===id));
-    if(used){alert('這個班別已經用在班表上，不能刪除。可以改名稱或工時。');return;}
-    if(!confirm(`刪除班別「${k.name}」？`))return;
-    DB.shifts=DB.shifts.filter(x=>x.id!==id);if(S.brush===id)S.brush=null;save();closeSheet();render();
-  };
+  $('wipe').onclick=()=>{if(confirm('確定清除所有員工與紀錄？')&&confirm('真的要清除嗎？無法復原。')){DB=defaults();save();S.emp='all';render();toast('已清除');}};
 }
 function helpCard(){
   return `<div class="card help"><b>📖 使用說明</b><ol style="padding-left:20px;margin:6px 0 0;font-size:14px">
-  <li>到「👥 員工」新增員工，設定<b>時薪／日薪／月薪</b>與金額。</li>
-  <li>到「📅 班表」選一位員工，點上方班別（畫筆），再點日期就排好班；再點一次同班別會清除。「套用到平日空白日」可一次排好週一到週五。</li>
-  <li>要填<b>加班時數、加給、扣款、備註</b>：選「✏️ 詳細」或在「全部」點日期。</li>
-  <li>「📊 統計」看每人本月<b>出勤天數、工時、加班、請假與實發薪資</b>，可匯出 Excel 或複製文字傳給會計。</li>
+  <li>到「👥 員工」新增員工，填<b>日薪</b>（1 工的工資）。</li>
+  <li>到「📅 班表」選一位員工，點「<b>1 工</b>」或「<b>0.5 工</b>」，再點日期就記好；再點一次同一個會取消。</li>
+  <li>有加班：點「<b>＋加班 0.5 工</b>」再點日期。一天加班不只一次，用「✏️ 詳細」調整次數。</li>
+  <li>「平日空白日全記 1 工」可一次記好週一到週五。要填<b>加給、預支／扣款、備註</b>：選「✏️ 詳細」，或在「全部」點日期。</li>
+  <li>「📊 統計」看每人本月<b>出勤天數、總工數與實發薪資</b>（總工數 × 日薪），可匯出 Excel 或複製文字。</li>
   <li>上方 ‹ › 切換月份。資料存在這支手機，記得到「⚙️ 設定」匯出備份。</li>
   <li>想放到主畫面：Safari 分享 →「加入主畫面」。</li></ol></div>`;
 }

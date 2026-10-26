@@ -4,7 +4,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 
 ## 檔案
 - `index.html`：整個 App（HTML＋CSS＋JS 都在這個檔）。
-- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v2`）。
+- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v3`）。
 - `manifest.json`、`icon-*.png`：加入主畫面用。
 - `.nojekyll`：讓 GitHub Pages 直接發布檔案（不要刪）。
 
@@ -16,9 +16,10 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 5. commit 訊息用中文簡述改了什麼。
 
 ## 重要的程式區塊（index.html）
-- 資料存在 localStorage（key `salaryBoss.v1`）：`employees`、`shifts`、`records['YYYY-MM-DD'][員工id]`、`settings`。沒有接雲端；設定頁可匯出／匯入 JSON 備份。
-- `calc()`：薪資計算。時薪＝工時×時薪、日薪＝出勤天數×日薪、月薪＝月薪−請假扣款（月薪÷30）；加班前 2 小時 ×1.34、之後 ×1.67（設定可改）；特休全薪、病假半薪、事假無薪、休假不計。
-- 畫面：`renderCal()` 班表（畫筆排班、`dayEditor()` 每日詳細）、`renderStat()` 統計與 CSV 匯出、`renderEmp()` 員工、`renderSet()` 設定。
+- 資料存在 localStorage（key `salaryBoss.v1`，內容 `ver:2`）：`employees`（姓名、日薪 `rate`）、`records['YYYY-MM-DD'][員工id]＝{w:0.5|1, ot:加班次數, add, sub, note}`。沒有接雲端；設定頁可匯出／匯入 JSON 備份。`migrate()` 會把 v1（班別、時薪／月薪）的資料轉成 v2。
+- 計薪規則（使用者指定）：不分早中晚班，只記日薪。一天 0.5 工或 1 工；每次加班＝0.5 工（`OT_UNIT`）；1 工＝1 日薪。
+- `calc()`：薪資＝（正班工數＋加班次數×0.5）× 日薪＋加給－預支／扣款。
+- 畫面：`renderCal()` 班表（按鈕快速記工 `tapDay()`、`dayEditor()` 每日詳細）、`renderStat()` 統計與 CSV 匯出、`renderEmp()` 員工、`renderSet()` 設定與備份。
 
 ## 使用者偏好
 - 介面與說明一律繁體中文。
