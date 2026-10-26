@@ -4,7 +4,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 
 ## 檔案
 - `index.html`：整個 App（HTML＋CSS＋JS 都在這個檔）。
-- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v5`）。
+- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v6`）。
 - `manifest.json`、`icon-*.png`：加入主畫面用。
 - `.nojekyll`：讓 GitHub Pages 直接發布檔案（不要刪）。
 
