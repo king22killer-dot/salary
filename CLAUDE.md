@@ -4,7 +4,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 
 ## 檔案
 - `index.html`：整個 App（HTML＋CSS＋JS 都在這個檔）。
-- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v4`）。
+- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v5`）。
 - `manifest.json`、`icon-*.png`：加入主畫面用。
 - `.nojekyll`：讓 GitHub Pages 直接發布檔案（不要刪）。
 
@@ -18,7 +18,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 ## 重要的程式區塊（index.html）
 - 資料存在 localStorage（key `salaryBoss.v1`，內容 `ver:2`）：`employees`（姓名、起薪 `rate`、調薪 `raises:[{from:'YYYY-MM-DD',rate}]`）、`records['YYYY-MM-DD'][員工id]＝{w:0.5|1, ot:加班次數, add, sub, note}`、`settings.cutoff`（結算日，0＝月底）。沒有接雲端；設定頁可匯出／匯入 JSON 備份。`migrate()` 會把 v1（班別、時薪／月薪）的資料轉成 v2。
 - 計薪規則（使用者指定）：不分早中晚班，只記日薪。一天 0.5 工或 1 工；每次加班＝0.5 工（`OT_UNIT`）；1 工＝1 日薪。
-- 薪資期間：`period(y,m)` 依結算日算出（結算日 25 → 10 月＝9/26～10/25）；統計頁可切「自訂」區間（`S.range`）。
+- 薪資期間：畫面上是「每期從 N 日 到 次月 N−1 日」（`startSelect()`），存成 `settings.cutoff＝N−1`；`period(y,m)` 算出以 m 月結束的那一期（26 日起 → 10 月那期＝9/26～10/25）。統計頁上方標題直接顯示起訖日期；可切「這次自訂」（`S.range`）。
 - 調薪：`rateOn(e,日期)` 取當天日薪；`calc(e,from,to)` 逐日累計，日薪不同就分段（`segs`），統計、CSV、薪資單都分段列出。
 - 薪資單：`slipText()` 產生文字，`slipSheet()` 可修改後用 `https://line.me/R/share?text=` 開 LINE 選聊天室傳送。
 - 畫面：`renderCal()` 班表（按鈕快速記工 `tapDay()`、`dayEditor()` 每日詳細）、`renderStat()` 統計與 CSV 匯出、`renderEmp()`／`editEmp()` 員工與調薪、`renderSet()` 設定（結算日、備份）。

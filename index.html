@@ -80,6 +80,7 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 .ask{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88vw,360px);background:white;border-radius:16px;padding:16px;z-index:71;display:none;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .ask.show{display:block}.ask p{margin:0 0 14px;font-size:16px;line-height:1.5;white-space:pre-wrap}.ask textarea{width:100%;min-height:120px;font-size:14px;margin-bottom:12px}
 .line{background:#06c755;color:white;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;min-height:42px;padding:9px 13px;font-size:15px;border:0}
+.pbig{font-size:17px;font-weight:800;margin:10px 0 2px;font-variant-numeric:tabular-nums}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#0f172a;color:white;padding:9px 16px;border-radius:999px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .help li{margin:4px 0}
@@ -105,7 +106,7 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 <div class="mask" id="askMask" style="z-index:70"></div>
 <div class="ask" id="ask"></div>
 <script>
-const APP_VER='v3（2026-10-26）';
+const APP_VER='v4（2026-10-26）';
 const KEY='salaryBoss.v1';
 const OT_UNIT=0.5; // 加班一次＝0.5 工
 const COLORS=['#2563eb','#7c3aed','#db2777','#0891b2','#ea580c','#65a30d','#0f766e','#9333ea'];
@@ -184,6 +185,16 @@ function period(y,m){
   return {from:addD(dkey(py,pm,Math.min(c,daysIn(py,pm))),1),to:dkey(y,m,Math.min(c,daysIn(y,m)))};
 }
 const curPeriod=()=>S.range||period(S.y,S.m);
+// 「每期從幾日到幾日」的選單；存的是 cutoff＝開始日−1（0＝1 日到月底）
+function startSelect(id){
+  const cur=num(DB.settings.cutoff)+1;
+  return `<select id="${id}">${Array.from({length:29},(_,i)=>i+1).map(n=>`<option value="${n}" ${cur===n?'selected':''}>${n===1?'1 日 到 當月月底':`${n} 日 到 次月 ${n-1} 日`}</option>`).join('')}</select>`;
+}
+function bindStart(id){
+  const el=$(id);if(!el)return;
+  el.onchange=()=>{DB.settings.cutoff=num(el.value)-1;S.range=null;save();render();toast('已儲存薪資期間');};
+}
+const wdOf=k=>'日一二三四五六'[k2d(k).getDay()];
 const periodDays=p=>Math.round((k2d(p.to)-k2d(p.from))/864e5)+1;
 
 // ===== 日薪與調薪：e.rate＝起薪，e.raises＝[{from:'YYYY-MM-DD',rate}] =====
@@ -215,7 +226,9 @@ const paySegs=r=>{const g=r.segs.filter(x=>x.units);return g.length?g:r.segs.sli
 
 // ===== 畫面 =====
 function render(){
-  $('mLabel').textContent=`${S.y}年${S.m+1}月`;
+  const pl=S.tab==='stat'&&(S.range||num(DB.settings.cutoff));
+  if(pl){const p=curPeriod();$('mLabel').textContent=`${md(p.from)}～${md(p.to)}`;}
+  else $('mLabel').textContent=`${S.y}年${S.m+1}月`;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
   ({cal:renderCal,stat:renderStat,emp:renderEmp,set:renderSet})[S.tab]();
 }
@@ -342,9 +355,12 @@ function dayEditor(d){
 function renderStat(){
   const p=curPeriod();
   const emps=DB.employees.filter(e=>e.active!==false||calc(e,p.from,p.to).list.length);
-  let h=`<div class="card"><div class="row"><b class="grow">薪資期間</b><div class="seg" style="flex:none"><button type="button" data-pm="auto" class="${S.range?'':'on'}">依結算日</button><button type="button" data-pm="custom" class="${S.range?'on':''}">自訂</button></div></div>`;
+  let h=`<div class="card"><b>薪資期間</b>
+  <div class="seg" style="margin-top:8px"><button type="button" data-pm="auto" class="${S.range?'':'on'}">每期固定日期</button><button type="button" data-pm="custom" class="${S.range?'on':''}">這次自訂</button></div>`;
   if(S.range)h+=`<div class="row" style="margin-top:8px"><input id="rgFrom" class="grow" type="date" value="${p.from}"><span>～</span><input id="rgTo" class="grow" type="date" value="${p.to}"></div>`;
-  h+=`<div class="small" style="margin-top:6px">${ymd(p.from)}～${ymd(p.to)}，共 ${periodDays(p)} 天。${S.range?'':(num(DB.settings.cutoff)?`每月 ${DB.settings.cutoff} 號結算`:'月底結算')}（結算日在「⚙️ 設定」改）</div></div>`;
+  else h+=`<label for="stStart">每期從</label>${startSelect('stStart')}`;
+  h+=`<div class="pbig">${ymd(p.from)}（${wdOf(p.from)}）～ ${ymd(p.to)}（${wdOf(p.to)}）</div>
+  <div class="small">共 ${periodDays(p)} 天。${S.range?'只算這一次，換月份或切回「每期固定日期」就恢復。':'上方 ‹ › 切換上一期／下一期。'}</div></div>`;
   if(!emps.length){$('view').innerHTML=h+'<div class="card empty">還沒有員工資料。</div>';bindPeriod();return;}
   const rs=emps.map(e=>({e,r:calc(e,p.from,p.to)}));
   const tot=rs.reduce((a,x)=>a+x.r.total,0),un=rs.reduce((a,x)=>a+x.r.units,0),ot=rs.reduce((a,x)=>a+x.r.ot,0);
@@ -370,6 +386,7 @@ function renderStat(){
   document.querySelectorAll('[data-slip]').forEach(b=>b.onclick=()=>{const x=rs.find(o=>o.e.id===b.dataset.slip);slipSheet(x.e,x.r,p);});
 }
 function bindPeriod(){
+  bindStart('stStart');
   document.querySelectorAll('[data-pm]').forEach(b=>b.onclick=()=>{S.range=b.dataset.pm==='custom'?Object.assign({},curPeriod()):null;render();});
   const f=$('rgFrom'),t=$('rgTo');if(!f)return;
   const upd=()=>{let a=f.value,b=t.value;if(!a||!b)return;if(a>b)[a,b]=[b,a];S.range={from:a,to:b};render();};
@@ -479,14 +496,14 @@ function editEmp(id){
 
 function renderSet(){
   let h=`<div class="card"><b>計算方式</b><div class="small" style="margin-top:4px;font-size:14px;color:#334155">每天記 <b>0.5 工</b> 或 <b>1 工</b>，每次加班 <b>＋0.5 工</b>。<br>薪資＝每天的工數 × 當天的日薪＋加給－預支／扣款（有調薪時分段計算）。</div></div>
-  <div class="card"><b>薪資計算區間</b><label for="sCut">結算日</label><select id="sCut"><option value="0">月底結算（每月 1 號～月底）</option>${Array.from({length:28},(_,i)=>i+1).map(n=>`<option value="${n}" ${num(DB.settings.cutoff)===n?'selected':''}>每月 ${n} 號結算（上月 ${n+1} 號～本月 ${n} 號）</option>`).join('')}</select>
-  <div class="small" style="margin-top:6px">例如選 25 號：10 月的薪資＝9/26～10/25。「📊 統計」也可以臨時改成自訂區間。</div></div>
+  <div class="card"><b>薪資期間</b><label for="sCut">每期從</label>${startSelect('sCut')}
+  <div class="small" style="margin-top:6px">例如選「26 日 到 次月 25 日」：會算 9/26～10/25、10/26～11/25…，跨月也沒問題。「📊 統計」也可以這次自訂起訖日期。</div></div>
   <div class="card"><b>備份</b><div class="small">資料只存在這支手機的瀏覽器裡，換手機或清除瀏覽器資料前請先備份。</div>
   <div class="row" style="margin-top:8px"><button class="secondary grow" id="bkOut">⬇️ 匯出備份</button><button class="secondary grow" id="bkIn">⬆️ 匯入備份</button></div>
   <input type="file" id="bkFile" accept=".json,application/json" style="display:none">
   <button class="danger" style="width:100%;margin-top:8px" id="wipe">清除全部資料</button></div>`+helpCard()+`<div class="small" style="text-align:center;margin:8px 0">App 版本：${APP_VER}</div>`;
   $('view').innerHTML=h;
-  $('sCut').onchange=ev=>{DB.settings.cutoff=num(ev.target.value);save();toast('已儲存結算日');};
+  bindStart('sCut');
   $('bkOut').onclick=()=>download(`薪資出勤備份_${dkey(now.getFullYear(),now.getMonth(),now.getDate())}.json`,JSON.stringify(DB,null,1),'application/json');
   $('bkIn').onclick=()=>$('bkFile').click();
   $('bkFile').onchange=ev=>{
@@ -505,7 +522,7 @@ function helpCard(){
   <li>有加班：點「<b>＋加班 0.5 工</b>」再點日期。一天加班不只一次，用「✏️ 詳細」調整次數。</li>
   <li>「平日空白日全記 1 工」可一次記好週一到週五。要填<b>加給、預支／扣款、備註</b>：選「✏️ 詳細」，或在「全部」點日期。</li>
   <li>「📊 統計」看每人<b>出勤天數、總工數與實發薪資</b>；期間內有調薪會分段列出。可匯出 Excel 或複製總表。</li>
-  <li><b>薪資期間</b>：到「⚙️ 設定」選結算日（例如每月 25 號）；統計頁也能切到「自訂」選起訖日期。上方 ‹ › 切換月份。</li>
+  <li><b>薪資期間</b>：在「📊 統計」最上面選「每期從幾日到幾日」（例如 26 日到次月 25 日，可以跨月）；只算一次的話選「這次自訂」挑起訖日期。上方 ‹ › 切換上一期／下一期。</li>
   <li><b>傳薪資單</b>：統計頁每個人下面按「💬 用 LINE 傳薪資單」，確認內容後按「用 LINE 傳送」，在 LINE 選這位員工的聊天室。</li>
   <li>資料存在這支手機，記得到「⚙️ 設定」匯出備份。想放到主畫面：Safari 分享 →「加入主畫面」。</li></ol></div>`;
 }
