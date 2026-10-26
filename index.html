@@ -75,10 +75,11 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 .de{border:1px solid #e2e8f0;border-radius:12px;padding:8px;margin-top:8px}
 .de .g{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .de .g label{margin:4px 0 2px;font-size:12px}
-.seg{display:flex;gap:6px}.seg button{flex:1;background:#e2e8f0;color:#0f172a}.seg button.on{background:#0f172a;color:white;font-weight:700}
+.seg{display:flex;gap:6px}.seg button{flex:1;background:#e2e8f0;color:#0f172a;white-space:nowrap}.seg button.on{background:#0f172a;color:white;font-weight:700}
 .step{display:flex;align-items:center;gap:8px}.step button{width:44px;background:#e2e8f0;font-size:20px;padding:0}.step b{min-width:28px;text-align:center;font-size:17px}
 .ask{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88vw,360px);background:white;border-radius:16px;padding:16px;z-index:71;display:none;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .ask.show{display:block}.ask p{margin:0 0 14px;font-size:16px;line-height:1.5;white-space:pre-wrap}.ask textarea{width:100%;min-height:120px;font-size:14px;margin-bottom:12px}
+.line{background:#06c755;color:white;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;min-height:42px;padding:9px 13px;font-size:15px;border:0}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#0f172a;color:white;padding:9px 16px;border-radius:999px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .help li{margin:4px 0}
@@ -104,7 +105,7 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 <div class="mask" id="askMask" style="z-index:70"></div>
 <div class="ask" id="ask"></div>
 <script>
-const APP_VER='v2（2026-10-26）';
+const APP_VER='v3（2026-10-26）';
 const KEY='salaryBoss.v1';
 const OT_UNIT=0.5; // 加班一次＝0.5 工
 const COLORS=['#2563eb','#7c3aed','#db2777','#0891b2','#ea580c','#65a30d','#0f766e','#9333ea'];
@@ -117,7 +118,7 @@ const pad=n=>String(n).padStart(2,'0');
 const dkey=(y,m,d)=>`${y}-${pad(m+1)}-${pad(d)}`;
 const wLabel=w=>w===0.5?'½':w===1?'1':'';
 
-function defaults(){return {ver:2,employees:[],records:{}};}
+function defaults(){return {ver:2,employees:[],records:{},settings:{cutoff:0}};}
 // v1（班別、時薪／月薪）→ v2（工數、只算日薪）
 function migrate(d){
   if(!d||typeof d!=='object')return defaults();
@@ -139,12 +140,12 @@ function migrate(d){
 }
 let DB;
 try{DB=JSON.parse(localStorage.getItem(KEY))||defaults();}catch(e){DB=defaults();}
-DB=migrate(DB);
+DB=migrate(DB);DB.settings=Object.assign({cutoff:0},DB.settings);
 function save(){try{localStorage.setItem(KEY,JSON.stringify(DB));}catch(e){toast('⚠️ 無法儲存到這台裝置');}}
 save();
 
 const now=new Date();
-const S={tab:'cal',y:now.getFullYear(),m:now.getMonth(),emp:'all',brush:'1'};
+const S={tab:'cal',y:now.getFullYear(),m:now.getMonth(),emp:'all',brush:'1',range:null};
 try{const t=sessionStorage.getItem('salaryTab');if(t)S.tab=t;}catch(e){}
 
 const $=id=>document.getElementById(id);
@@ -168,22 +169,49 @@ function ask(msg,o={}){
 const activeEmps=()=>DB.employees.filter(e=>e.active!==false);
 const empById=id=>DB.employees.find(e=>e.id===id);
 const daysIn=(y,m)=>new Date(y,m+1,0).getDate();
+const k2d=k=>{const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d);};
+const d2k=t=>dkey(t.getFullYear(),t.getMonth(),t.getDate());
+const addD=(k,n)=>{const t=k2d(k);t.setDate(t.getDate()+n);return d2k(t);};
+const md=k=>{const t=k2d(k);return `${t.getMonth()+1}/${t.getDate()}`;};
+const ymd=k=>{const t=k2d(k);return `${t.getFullYear()}/${t.getMonth()+1}/${t.getDate()}`;};
+const todayKey=()=>d2k(new Date());
 
-// ===== 薪資計算：總工數 × 日薪 =====
-function calc(e,y,m){
-  const r={days:0,work:0,otCount:0,ot:0,units:0,pay:0,add:0,sub:0,list:[]};
-  for(let d=1;d<=daysIn(y,m);d++){
-    const rec=(DB.records[dkey(y,m,d)]||{})[e.id];if(!rec)continue;
+// ===== 薪資期間：結算日 cutoff（0＝月底）→ 第 y 年 m 月的薪資期間 =====
+function period(y,m){
+  const c=num(DB.settings.cutoff);
+  if(!c)return {from:dkey(y,m,1),to:dkey(y,m,daysIn(y,m))};
+  const pm=m?m-1:11,py=m?y:y-1;
+  return {from:addD(dkey(py,pm,Math.min(c,daysIn(py,pm))),1),to:dkey(y,m,Math.min(c,daysIn(y,m)))};
+}
+const curPeriod=()=>S.range||period(S.y,S.m);
+const periodDays=p=>Math.round((k2d(p.to)-k2d(p.from))/864e5)+1;
+
+// ===== 日薪與調薪：e.rate＝起薪，e.raises＝[{from:'YYYY-MM-DD',rate}] =====
+const raisesOf=e=>(e.raises||[]).slice().sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
+function rateOn(e,k){let v=num(e.rate);raisesOf(e).forEach(x=>{if(x.from<=k)v=num(x.rate);});return v;}
+
+// ===== 薪資計算：每天的工數 × 當天的日薪（調薪後分段計算）=====
+function calc(e,from,to){
+  const r={days:0,work:0,otCount:0,ot:0,units:0,pay:0,add:0,sub:0,list:[],segs:[]};
+  let seg=null;
+  for(let k=from;k<=to;k=addD(k,1)){
+    const rate=rateOn(e,k);
+    if(!seg||seg.rate!==rate){seg={from:k,to:k,rate,units:0};r.segs.push(seg);}
+    seg.to=k;
+    const rec=(DB.records[k]||{})[e.id];if(!rec)continue;
     const w=num(rec.w),oc=num(rec.ot);
     if(w>0)r.days++;
-    r.work+=w;r.otCount+=oc;r.add+=num(rec.add);r.sub+=num(rec.sub);
-    r.list.push({d,rec});
+    r.work+=w;r.otCount+=oc;r.add+=num(rec.add);r.sub+=num(rec.sub);seg.units+=w+oc*OT_UNIT;
+    r.list.push({k,rec});
   }
   r.ot=r.otCount*OT_UNIT;r.units=r.work+r.ot;
-  r.pay=Math.round(r.units*num(e.rate));
+  r.segs.forEach(g=>g.pay=Math.round(g.units*g.rate));
+  r.pay=r.segs.reduce((a,g)=>a+g.pay,0);
   r.total=r.pay+r.add-r.sub;
   return r;
 }
+// 有工數的分段；全部同一個日薪時只有一段
+const paySegs=r=>{const g=r.segs.filter(x=>x.units);return g.length?g:r.segs.slice(-1);};
 
 // ===== 畫面 =====
 function render(){
@@ -191,7 +219,7 @@ function render(){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
   ({cal:renderCal,stat:renderStat,emp:renderEmp,set:renderSet})[S.tab]();
 }
-function shiftMonth(dm){S.m+=dm;if(S.m<0){S.m=11;S.y--;}if(S.m>11){S.m=0;S.y++;}render();}
+function shiftMonth(dm){S.range=null;S.m+=dm;if(S.m<0){S.m=11;S.y--;}if(S.m>11){S.m=0;S.y++;}render();}
 $('prevM').onclick=()=>shiftMonth(-1);$('nextM').onclick=()=>shiftMonth(1);
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;try{sessionStorage.setItem('salaryTab',S.tab);}catch(e){}window.scrollTo(0,0);render();});
 
@@ -235,8 +263,8 @@ function renderCal(){
   }
   h+='</div></div>';
   if(S.emp!=='all'){
-    const e=empById(S.emp),r=calc(e,S.y,S.m);
-    h+=`<div class="card"><div class="kpi"><div><b>${r.days}</b><small>出勤天數</small></div><div><b>${fu(r.units)}</b><small>總工數</small></div><div><b>${fmt(r.total)}</b><small>本月薪資</small></div></div></div>`;
+    const e=empById(S.emp),p=period(S.y,S.m),r=calc(e,p.from,p.to);
+    h+=`<div class="card"><div class="kpi"><div><b>${r.days}</b><small>出勤天數</small></div><div><b>${fu(r.units)}</b><small>總工數</small></div><div><b>${fmt(r.total)}</b><small>本期薪資</small></div></div><div class="small" style="margin-top:6px;text-align:center">薪資期間 ${ymd(p.from)}～${ymd(p.to)}</div></div>`;
   }
   $('view').innerHTML=h;
   document.querySelectorAll('[data-emp]').forEach(b=>b.onclick=()=>{S.emp=b.dataset.emp;render();});
@@ -284,7 +312,7 @@ function dayEditor(d){
   let h=`<h2>${S.m+1}月${d}日（${wd}）</h2><div class="small">1 工＝1 天日薪；加班每次 0.5 工。</div>`;
   emps.forEach(e=>{
     const r=day[e.id]||{},w=num(r.w);
-    h+=`<div class="de" data-e="${e.id}" data-w="${w}" data-ot="${num(r.ot)}"><div class="emp-h"><span class="dot" style="background:${e.color}"></span><b class="grow">${esc(e.name)}</b><span class="small">日薪 ${fmt(num(e.rate))}</span></div>
+    h+=`<div class="de" data-e="${e.id}" data-w="${w}" data-ot="${num(r.ot)}"><div class="emp-h"><span class="dot" style="background:${e.color}"></span><b class="grow">${esc(e.name)}</b><span class="small">日薪 ${fmt(rateOn(e,key))}</span></div>
     <label>正班</label><div class="seg">${[[0,'沒上班'],[0.5,'0.5 工'],[1,'1 工']].map(([v,t])=>`<button type="button" data-wv="${v}" class="${w===v?'on':''}">${t}</button>`).join('')}</div>
     <label>加班（每次 0.5 工）</label><div class="step"><button type="button" data-otd="-1">−</button><b data-otn>${num(r.ot)}</b><button type="button" data-otd="1">＋</button><span class="small" data-otu>次＝${fu(num(r.ot)*OT_UNIT)} 工</span></div>
     <div class="g"><div><label>加給／獎金（元）</label><input data-f="add" type="number" inputmode="numeric" value="${esc(r.add??'')}" placeholder="0"></div>
@@ -312,27 +340,77 @@ function dayEditor(d){
 }
 
 function renderStat(){
-  const emps=DB.employees.filter(e=>e.active!==false||calc(e,S.y,S.m).list.length);
-  if(!emps.length){$('view').innerHTML='<div class="card empty">還沒有員工資料。</div>';return;}
-  const rs=emps.map(e=>({e,r:calc(e,S.y,S.m)}));
+  const p=curPeriod();
+  const emps=DB.employees.filter(e=>e.active!==false||calc(e,p.from,p.to).list.length);
+  let h=`<div class="card"><div class="row"><b class="grow">薪資期間</b><div class="seg" style="flex:none"><button type="button" data-pm="auto" class="${S.range?'':'on'}">依結算日</button><button type="button" data-pm="custom" class="${S.range?'on':''}">自訂</button></div></div>`;
+  if(S.range)h+=`<div class="row" style="margin-top:8px"><input id="rgFrom" class="grow" type="date" value="${p.from}"><span>～</span><input id="rgTo" class="grow" type="date" value="${p.to}"></div>`;
+  h+=`<div class="small" style="margin-top:6px">${ymd(p.from)}～${ymd(p.to)}，共 ${periodDays(p)} 天。${S.range?'':(num(DB.settings.cutoff)?`每月 ${DB.settings.cutoff} 號結算`:'月底結算')}（結算日在「⚙️ 設定」改）</div></div>`;
+  if(!emps.length){$('view').innerHTML=h+'<div class="card empty">還沒有員工資料。</div>';bindPeriod();return;}
+  const rs=emps.map(e=>({e,r:calc(e,p.from,p.to)}));
   const tot=rs.reduce((a,x)=>a+x.r.total,0),un=rs.reduce((a,x)=>a+x.r.units,0),ot=rs.reduce((a,x)=>a+x.r.ot,0);
-  let h=`<div class="card"><div class="kpi"><div><b>${fmt(tot)}</b><small>薪資總支出</small></div><div><b>${fu(un)}</b><small>總工數</small></div><div><b>${fu(ot)}</b><small>加班工數</small></div></div>
-  <div class="row" style="margin-top:10px"><button class="secondary grow" id="csv">📄 匯出 Excel（CSV）</button><button class="secondary grow" id="cp">📋 複製文字</button></div></div>`;
+  h+=`<div class="card"><div class="kpi"><div><b>${fmt(tot)}</b><small>薪資總支出</small></div><div><b>${fu(un)}</b><small>總工數</small></div><div><b>${fu(ot)}</b><small>加班工數</small></div></div>
+  <div class="row" style="margin-top:10px"><button class="secondary grow" id="csv">📄 匯出 Excel（CSV）</button><button class="secondary grow" id="cp">📋 複製總表</button></div></div>`;
   rs.forEach(({e,r})=>{
+    const sg=paySegs(r);
     h+=`<div class="card"><div class="emp-h"><span class="dot" style="background:${e.color}"></span><b class="grow">${esc(e.name)}</b><span class="money">$${fmt(r.total)}</span></div>
-    <div class="small" style="margin-top:4px">日薪 ${fmt(num(e.rate))}・出勤 ${r.days} 天・正班 ${fu(r.work)} 工・加班 ${r.otCount} 次（${fu(r.ot)} 工）</div>
-    <table class="br"><tr><td>總工數 ${fu(r.units)} 工 × 日薪 ${fmt(num(e.rate))}</td><td>${fmt(r.pay)}</td></tr>
+    <div class="small" style="margin-top:4px">出勤 ${r.days} 天・正班 ${fu(r.work)} 工・加班 ${r.otCount} 次（${fu(r.ot)} 工）・共 ${fu(r.units)} 工${sg.length>1?'・<b style="color:#b45309">期間內有調薪</b>':''}</div>
+    <table class="br">${sg.map(g=>`<tr><td>${sg.length>1?`${md(g.from)}～${md(g.to)}　`:''}${fu(g.units)} 工 × 日薪 ${fmt(g.rate)}</td><td>${fmt(g.pay)}</td></tr>`).join('')}
     <tr><td>加給／獎金</td><td>${fmt(r.add)}</td></tr><tr><td>預支／扣款</td><td>${r.sub?'−'+fmt(r.sub):0}</td></tr>
     <tr class="sum"><td>實發</td><td>${fmt(r.total)}</td></tr></table>
-    <details><summary>每日明細（${r.list.length} 筆）</summary><div class="daylist">${r.list.map(({d,rec})=>`<div><span>${S.m+1}/${d} ${num(rec.w)?fu(num(rec.w))+' 工':''}${num(rec.ot)?` 加班${num(rec.ot)}次`:''}${rec.note?`（${esc(rec.note)}）`:''}</span><span>${num(rec.add)?'+'+fmt(num(rec.add)):''}${num(rec.sub)?' −'+fmt(num(rec.sub)):''}</span></div>`).join('')||'<div>本月沒有紀錄</div>'}</div></details></div>`;
+    <button class="line" style="width:100%;margin-top:8px" data-slip="${e.id}">💬 用 LINE 傳薪資單</button>
+    <details><summary>每日明細（${r.list.length} 筆）</summary><div class="daylist">${r.list.map(({k,rec})=>`<div><span>${md(k)} ${num(rec.w)?fu(num(rec.w))+' 工':''}${num(rec.ot)?` 加班${num(rec.ot)}次`:''}${rec.note?`（${esc(rec.note)}）`:''}</span><span>${num(rec.add)?'+'+fmt(num(rec.add)):''}${num(rec.sub)?' −'+fmt(num(rec.sub)):''}</span></div>`).join('')||'<div>這段期間沒有紀錄</div>'}</div></details></div>`;
   });
   $('view').innerHTML=h;
-  $('csv').onclick=()=>exportCSV(rs);
+  bindPeriod();
+  $('csv').onclick=()=>exportCSV(rs,p);
   $('cp').onclick=()=>{
-    const t=`${S.y}年${S.m+1}月 薪資統計\n`+rs.map(({e,r})=>`${e.name}：出勤${r.days}天、共${fu(r.units)}工（加班${fu(r.ot)}工）、實發 ${fmt(r.total)} 元`).join('\n')+`\n合計：${fmt(tot)} 元`;
-    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('已複製'),()=>ask('請長按下面的文字複製：',{text:t,alert:true,ok:'關閉'}));
+    const t=`${ymd(p.from)}～${ymd(p.to)} 薪資統計\n`+rs.map(({e,r})=>`${e.name}：出勤${r.days}天、共${fu(r.units)}工（加班${fu(r.ot)}工）、實發 ${fmt(r.total)} 元`).join('\n')+`\n合計：${fmt(tot)} 元`;
+    copyText(t);
   };
+  document.querySelectorAll('[data-slip]').forEach(b=>b.onclick=()=>{const x=rs.find(o=>o.e.id===b.dataset.slip);slipSheet(x.e,x.r,p);});
 }
+function bindPeriod(){
+  document.querySelectorAll('[data-pm]').forEach(b=>b.onclick=()=>{S.range=b.dataset.pm==='custom'?Object.assign({},curPeriod()):null;render();});
+  const f=$('rgFrom'),t=$('rgTo');if(!f)return;
+  const upd=()=>{let a=f.value,b=t.value;if(!a||!b)return;if(a>b)[a,b]=[b,a];S.range={from:a,to:b};render();};
+  f.onchange=upd;t.onchange=upd;
+}
+function copyText(t){
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('已複製'),()=>ask('請長按下面的文字複製：',{text:t,alert:true,ok:'關閉'}));
+}
+// ===== 薪資單（LINE 傳送）=====
+function slipText(e,r,p,detail){
+  const sg=paySegs(r),L=[];
+  L.push(`【薪資單】${e.name}`,`期間：${ymd(p.from)}～${ymd(p.to)}`,'',`出勤：${r.days} 天`,`正班：${fu(r.work)} 工`,`加班：${r.otCount} 次（${fu(r.ot)} 工）`,`合計：${fu(r.units)} 工`,'');
+  if(sg.length>1){L.push('工資（期間內調薪）：');sg.forEach(g=>L.push(`　${md(g.from)}～${md(g.to)}　${fu(g.units)} 工 × ${fmt(g.rate)} ＝ ${fmt(g.pay)}`));}
+  else L.push(`工資：${fu(sg[0].units)} 工 × 日薪 ${fmt(sg[0].rate)} ＝ ${fmt(sg[0].pay)}`);
+  if(r.add)L.push(`加給／獎金：＋${fmt(r.add)}`);
+  if(r.sub)L.push(`預支／扣款：－${fmt(r.sub)}`);
+  L.push(`實發：${fmt(r.total)} 元`);
+  if(detail&&r.list.length){
+    L.push('','— 每日明細 —');
+    r.list.forEach(({k,rec})=>{
+      const a=[];if(num(rec.w))a.push(`${fu(num(rec.w))} 工`);if(num(rec.ot))a.push(`加班${num(rec.ot)}次`);
+      if(num(rec.add))a.push(`+${fmt(num(rec.add))}`);if(num(rec.sub))a.push(`−${fmt(num(rec.sub))}`);if(rec.note)a.push(rec.note);
+      L.push(`${md(k)}（${'日一二三四五六'[k2d(k).getDay()]}）${a.join('　')}`);
+    });
+  }
+  return L.join('\n');
+}
+function slipSheet(e,r,p){
+  openSheet(`<h2>薪資單：${esc(e.name)}</h2>
+  <label style="margin:6px 0"><input type="checkbox" id="slDetail" checked>附每日明細</label>
+  <textarea id="slText" style="min-height:280px;font-size:15px;line-height:1.5"></textarea>
+  <div class="small" style="margin:6px 0 10px">可以先修改內容。按「用 LINE 傳送」後，在 LINE 選擇要傳給 ${esc(e.name)} 的聊天室。</div>
+  <div class="row"><button class="secondary" onclick="closeSheet()">關閉</button><button class="secondary grow" id="slCopy">📋 複製</button><a class="line grow" id="slLine" target="_blank" rel="noopener">💬 用 LINE 傳送</a></div>`);
+  const ta=$('slText'),a=$('slLine');
+  const link=()=>{a.href='https://line.me/R/share?text='+encodeURIComponent(ta.value);};
+  const fill=()=>{ta.value=slipText(e,r,p,$('slDetail').checked);link();};
+  fill();
+  $('slDetail').onchange=fill;ta.oninput=link;
+  $('slCopy').onclick=()=>copyText(ta.value);
+}
+
 function download(name,text,type){
   const blob=new Blob([text],{type});
   const file=typeof File!=='undefined'?new File([blob],name,{type}):null;
@@ -340,34 +418,53 @@ function download(name,text,type){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
 }
-function exportCSV(rs){
+function exportCSV(rs,p){
   const q=v=>`"${String(v).replace(/"/g,'""')}"`;
-  const rows=[['員工','日薪','出勤天數','正班工數','加班次數','加班工數','總工數','工資','加給','預支扣款','實發']];
-  rs.forEach(({e,r})=>rows.push([e.name,num(e.rate),r.days,fu(r.work),r.otCount,fu(r.ot),fu(r.units),r.pay,r.add,r.sub,r.total]));
-  rows.push([],['日期','員工','正班工數','加班次數','加給','預支扣款','備註']);
-  rs.forEach(({e,r})=>r.list.forEach(({d,rec})=>rows.push([dkey(S.y,S.m,d),e.name,num(rec.w)||'',num(rec.ot)||'',rec.add??'',rec.sub??'',rec.note??''])));
-  download(`薪資出勤_${S.y}-${pad(S.m+1)}.csv`,'﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv;charset=utf-8');
+  const rows=[[`薪資期間 ${ymd(p.from)}～${ymd(p.to)}`],['員工','日薪（分段）','出勤天數','正班工數','加班次數','加班工數','總工數','工資','加給','預支扣款','實發']];
+  rs.forEach(({e,r})=>rows.push([e.name,paySegs(r).map(g=>`${md(g.from)}~${md(g.to)} ${fu(g.units)}工×${g.rate}`).join('；'),r.days,fu(r.work),r.otCount,fu(r.ot),fu(r.units),r.pay,r.add,r.sub,r.total]));
+  rows.push([],['日期','員工','日薪','正班工數','加班次數','加給','預支扣款','備註']);
+  rs.forEach(({e,r})=>r.list.forEach(({k,rec})=>rows.push([k,e.name,rateOn(e,k),num(rec.w)||'',num(rec.ot)||'',rec.add??'',rec.sub??'',rec.note??''])));
+  download(`薪資出勤_${p.from}_${p.to}.csv`,'﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv;charset=utf-8');
 }
 
 function renderEmp(){
   let h=`<div class="card"><button class="primary" style="width:100%" onclick="editEmp()">＋ 新增員工</button></div><div class="card">`;
   if(!DB.employees.length)h+='<div class="empty">還沒有員工</div>';
-  DB.employees.forEach(e=>h+=`<div class="li" data-id="${e.id}"><span class="dot" style="background:${e.color}"></span><div class="grow"><b>${esc(e.name)}</b>${e.active===false?' <span class="small">（已離職）</span>':''}<div class="small">日薪 ${fmt(num(e.rate))} 元${e.note?'・'+esc(e.note):''}</div></div><span class="small">編輯 ›</span></div>`);
+  DB.employees.forEach(e=>{const n=(e.raises||[]).length;
+    h+=`<div class="li" data-id="${e.id}"><span class="dot" style="background:${e.color}"></span><div class="grow"><b>${esc(e.name)}</b>${e.active===false?' <span class="small">（已離職）</span>':''}<div class="small">目前日薪 ${fmt(rateOn(e,todayKey()))} 元${n?`・調薪 ${n} 次`:''}${e.note?'・'+esc(e.note):''}</div></div><span class="small">編輯 ›</span></div>`;});
   $('view').innerHTML=h+'</div>';
   document.querySelectorAll('.li[data-id]').forEach(li=>li.onclick=()=>editEmp(li.dataset.id));
 }
+
 function editEmp(id){
-  const e=id?empById(id):{id:uid(),name:'',rate:'',color:COLORS[DB.employees.length%COLORS.length],active:true};
+  const e=id?empById(id):{id:uid(),name:'',rate:'',raises:[],color:COLORS[DB.employees.length%COLORS.length],active:true};
+  let rs=raisesOf(e).map(x=>({...x}));
   openSheet(`<h2>${id?'編輯員工':'新增員工'}</h2>
   <label>姓名</label><input id="eName" value="${esc(e.name)}" placeholder="例如：王小明">
-  <div class="row"><div class="grow"><label>日薪（元，1 工的工資）</label><input id="eRate" type="number" inputmode="numeric" value="${esc(e.rate)}" placeholder="例如：2000"></div>
+  <div class="row"><div class="grow"><label>起薪：日薪（元，1 工的工資）</label><input id="eRate" type="number" inputmode="numeric" value="${esc(e.rate)}" placeholder="例如：2000"></div>
   <div style="width:80px"><label>顏色</label><input id="eColor" type="color" value="${e.color}"></div></div>
+  <div class="de" style="margin-top:10px"><b>📈 調薪紀錄</b>
+    <div class="small" style="margin:2px 0 6px">加薪時在這裡新增「從哪天開始、新日薪」。生效日以前的工數照舊日薪算，以後的用新日薪，統計會分段列出。</div>
+    <div id="rsList"></div>
+    <div class="row" style="margin-top:6px"><input id="rsFrom" class="grow" type="date" value="${todayKey()}"><input id="rsRate" class="grow" type="number" inputmode="numeric" placeholder="新日薪"><button class="secondary" id="rsAdd" type="button">＋ 新增</button></div>
+  </div>
   <label>備註</label><input id="eNote" value="${esc(e.note||'')}" placeholder="電話、職稱…">
   <label style="margin-top:12px"><input type="checkbox" id="eAct" ${e.active!==false?'checked':''}>在職（取消勾選＝離職，不會出現在班表）</label>
   <div class="row" style="margin-top:12px">${id?'<button class="danger" id="eDel">刪除</button>':''}<button class="secondary grow" onclick="closeSheet()">取消</button><button class="primary grow" id="eSave">儲存</button></div>`);
+  const draw=()=>{
+    rs.sort((a,b)=>a.from<b.from?-1:1);
+    $('rsList').innerHTML=rs.length?rs.map((x,i)=>`<div class="row" style="justify-content:space-between;padding:4px 0;border-bottom:1px dashed #e2e8f0"><span>${ymd(x.from)} 起　日薪 <b>${fmt(num(x.rate))}</b></span><button class="danger" type="button" style="min-height:34px;padding:4px 10px" data-rsdel="${i}">刪除</button></div>`).join(''):'<div class="small">還沒有調薪紀錄</div>';
+    document.querySelectorAll('[data-rsdel]').forEach(b=>b.onclick=()=>{rs.splice(+b.dataset.rsdel,1);draw();});
+  };
+  draw();
+  $('rsAdd').onclick=()=>{
+    const f=$('rsFrom').value,v=num($('rsRate').value);
+    if(!f||!v){toast('請填生效日和新日薪');return;}
+    rs=rs.filter(x=>x.from!==f);rs.push({from:f,rate:v});$('rsRate').value='';draw();toast('已加入，記得按「儲存」');
+  };
   $('eSave').onclick=()=>{
     const name=$('eName').value.trim();if(!name){toast('請輸入姓名');return;}
-    Object.assign(e,{name,rate:num($('eRate').value),color:$('eColor').value,note:$('eNote').value.trim(),active:$('eAct').checked});
+    Object.assign(e,{name,rate:num($('eRate').value),raises:rs,color:$('eColor').value,note:$('eNote').value.trim(),active:$('eAct').checked});
     if(!id)DB.employees.push(e);
     save();closeSheet();render();toast('已儲存');
   };
@@ -381,12 +478,15 @@ function editEmp(id){
 }
 
 function renderSet(){
-  let h=`<div class="card"><b>計算方式</b><div class="small" style="margin-top:4px;font-size:14px;color:#334155">每天記 <b>0.5 工</b> 或 <b>1 工</b>，每次加班 <b>＋0.5 工</b>。<br>薪資＝總工數 × 日薪＋加給－預支／扣款。</div></div>
+  let h=`<div class="card"><b>計算方式</b><div class="small" style="margin-top:4px;font-size:14px;color:#334155">每天記 <b>0.5 工</b> 或 <b>1 工</b>，每次加班 <b>＋0.5 工</b>。<br>薪資＝每天的工數 × 當天的日薪＋加給－預支／扣款（有調薪時分段計算）。</div></div>
+  <div class="card"><b>薪資計算區間</b><label for="sCut">結算日</label><select id="sCut"><option value="0">月底結算（每月 1 號～月底）</option>${Array.from({length:28},(_,i)=>i+1).map(n=>`<option value="${n}" ${num(DB.settings.cutoff)===n?'selected':''}>每月 ${n} 號結算（上月 ${n+1} 號～本月 ${n} 號）</option>`).join('')}</select>
+  <div class="small" style="margin-top:6px">例如選 25 號：10 月的薪資＝9/26～10/25。「📊 統計」也可以臨時改成自訂區間。</div></div>
   <div class="card"><b>備份</b><div class="small">資料只存在這支手機的瀏覽器裡，換手機或清除瀏覽器資料前請先備份。</div>
   <div class="row" style="margin-top:8px"><button class="secondary grow" id="bkOut">⬇️ 匯出備份</button><button class="secondary grow" id="bkIn">⬆️ 匯入備份</button></div>
   <input type="file" id="bkFile" accept=".json,application/json" style="display:none">
   <button class="danger" style="width:100%;margin-top:8px" id="wipe">清除全部資料</button></div>`+helpCard()+`<div class="small" style="text-align:center;margin:8px 0">App 版本：${APP_VER}</div>`;
   $('view').innerHTML=h;
+  $('sCut').onchange=ev=>{DB.settings.cutoff=num(ev.target.value);save();toast('已儲存結算日');};
   $('bkOut').onclick=()=>download(`薪資出勤備份_${dkey(now.getFullYear(),now.getMonth(),now.getDate())}.json`,JSON.stringify(DB,null,1),'application/json');
   $('bkIn').onclick=()=>$('bkFile').click();
   $('bkFile').onchange=ev=>{
@@ -400,14 +500,16 @@ function renderSet(){
 }
 function helpCard(){
   return `<div class="card help"><b>📖 使用說明</b><ol style="padding-left:20px;margin:6px 0 0;font-size:14px">
-  <li>到「👥 員工」新增員工，填<b>日薪</b>（1 工的工資）。</li>
+  <li>到「👥 員工」新增員工，填<b>起薪（日薪）</b>。之後加薪：編輯員工 →「📈 調薪紀錄」填生效日和新日薪，舊的工數照舊日薪算。</li>
   <li>到「📅 班表」選一位員工，點「<b>1 工</b>」或「<b>0.5 工</b>」，再點日期就記好；再點一次同一個會取消。</li>
   <li>有加班：點「<b>＋加班 0.5 工</b>」再點日期。一天加班不只一次，用「✏️ 詳細」調整次數。</li>
   <li>「平日空白日全記 1 工」可一次記好週一到週五。要填<b>加給、預支／扣款、備註</b>：選「✏️ 詳細」，或在「全部」點日期。</li>
-  <li>「📊 統計」看每人本月<b>出勤天數、總工數與實發薪資</b>（總工數 × 日薪），可匯出 Excel 或複製文字。</li>
-  <li>上方 ‹ › 切換月份。資料存在這支手機，記得到「⚙️ 設定」匯出備份。</li>
-  <li>想放到主畫面：Safari 分享 →「加入主畫面」。</li></ol></div>`;
+  <li>「📊 統計」看每人<b>出勤天數、總工數與實發薪資</b>；期間內有調薪會分段列出。可匯出 Excel 或複製總表。</li>
+  <li><b>薪資期間</b>：到「⚙️ 設定」選結算日（例如每月 25 號）；統計頁也能切到「自訂」選起訖日期。上方 ‹ › 切換月份。</li>
+  <li><b>傳薪資單</b>：統計頁每個人下面按「💬 用 LINE 傳薪資單」，確認內容後按「用 LINE 傳送」，在 LINE 選這位員工的聊天室。</li>
+  <li>資料存在這支手機，記得到「⚙️ 設定」匯出備份。想放到主畫面：Safari 分享 →「加入主畫面」。</li></ol></div>`;
 }
+
 render();
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
