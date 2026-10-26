@@ -81,6 +81,9 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 .ask.show{display:block}.ask p{margin:0 0 14px;font-size:16px;line-height:1.5;white-space:pre-wrap}.ask textarea{width:100%;min-height:120px;font-size:14px;margin-bottom:12px}
 .line{background:#06c755;color:white;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;min-height:42px;padding:9px 13px;font-size:15px;border:0}
 .pbig{font-size:17px;font-weight:800;margin:10px 0 2px;font-variant-numeric:tabular-nums}
+.pj{font-size:10px;font-weight:700;max-width:100%;overflow:hidden;white-space:nowrap}
+.pick{display:flex;flex-direction:column;gap:6px;margin-top:10px}.pick button{display:flex;align-items:center;gap:8px;background:#f1f5f9;color:#0f172a;border:2px solid transparent;text-align:left}
+.pick button.on{background:#dbeafe;border-color:#2563eb;font-weight:700}.pick button.on::after{content:"✓";color:#2563eb;font-weight:800}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#0f172a;color:white;padding:9px 16px;border-radius:999px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .help li{margin:4px 0}
@@ -106,7 +109,7 @@ details summary{cursor:pointer;color:#2563eb;font-size:13px;margin-top:6px}
 <div class="mask" id="askMask" style="z-index:70"></div>
 <div class="ask" id="ask"></div>
 <script>
-const APP_VER='v5（2026-10-26）';
+const APP_VER='v6（2026-10-26）';
 const KEY='salaryBoss.v1';
 const OT_UNIT=0.5; // 加班一次＝0.5 工
 const COLORS=['#2563eb','#7c3aed','#db2777','#0891b2','#ea580c','#65a30d','#0f766e','#9333ea'];
@@ -119,7 +122,7 @@ const pad=n=>String(n).padStart(2,'0');
 const dkey=(y,m,d)=>`${y}-${pad(m+1)}-${pad(d)}`;
 const wLabel=w=>w===0.5?'½':w===1?'1':'';
 
-function defaults(){return {ver:2,employees:[],records:{},settings:{cutoff:0}};}
+function defaults(){return {ver:2,employees:[],projects:[],records:{},settings:{cutoff:0}};}
 // v1（班別、時薪／月薪）→ v2（工數、只算日薪）
 function migrate(d){
   if(!d||typeof d!=='object')return defaults();
@@ -141,12 +144,13 @@ function migrate(d){
 }
 let DB;
 try{DB=JSON.parse(localStorage.getItem(KEY))||defaults();}catch(e){DB=defaults();}
-DB=migrate(DB);DB.settings=Object.assign({cutoff:0},DB.settings);
+DB=migrate(DB);DB.settings=Object.assign({cutoff:0},DB.settings);DB.projects=DB.projects||[];
 function save(){try{localStorage.setItem(KEY,JSON.stringify(DB));}catch(e){toast('⚠️ 無法儲存到這台裝置');}}
 save();
 
 const now=new Date();
-const S={tab:'cal',y:now.getFullYear(),m:now.getMonth(),emp:'all',brush:'1',range:null};
+const S={tab:'cal',y:now.getFullYear(),m:now.getMonth(),emp:'all',brush:'1',range:null,calMode:'rec',jd:null};
+try{S.calMode=sessionStorage.getItem('salaryCalMode')||'rec';}catch(e){}
 try{const t=sessionStorage.getItem('salaryTab');if(t)S.tab=t;}catch(e){}
 
 const $=id=>document.getElementById(id);
@@ -213,7 +217,7 @@ function calc(e,from,to){
     const w=num(rec.w),oc=num(rec.ot);
     if(w>0)r.days++;
     r.work+=w;r.otCount+=oc;r.add+=num(rec.add);r.sub+=num(rec.sub);seg.units+=w+oc*OT_UNIT;
-    r.list.push({k,rec});
+    if(w||oc||num(rec.add)||num(rec.sub)||rec.note)r.list.push({k,rec});
   }
   r.ot=r.otCount*OT_UNIT;r.units=r.work+r.ot;
   r.segs.forEach(g=>g.pay=Math.round(g.units*g.rate));
@@ -227,12 +231,16 @@ const paySegs=r=>{const g=r.segs.filter(x=>x.units);return g.length?g:r.segs.sli
 // ===== 畫面 =====
 function render(){
   const pl=S.tab==='stat'&&(S.range||num(DB.settings.cutoff));
-  if(pl){const p=curPeriod();$('mLabel').textContent=`${md(p.from)}～${md(p.to)}`;}
+  if(jobMode()&&!S.jd)setJd(todayKey());
+  if(jobMode())$('mLabel').textContent=`${md(S.jd)}（${wdOf(S.jd)}）`;
+  else if(pl){const p=curPeriod();$('mLabel').textContent=`${md(p.from)}～${md(p.to)}`;}
   else $('mLabel').textContent=`${S.y}年${S.m+1}月`;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
   ({cal:renderCal,stat:renderStat,emp:renderEmp,set:renderSet})[S.tab]();
 }
-function shiftMonth(dm){S.range=null;S.m+=dm;if(S.m<0){S.m=11;S.y--;}if(S.m>11){S.m=0;S.y++;}render();}
+function shiftMonth(dm){
+  if(jobMode()){setJd(addD(S.jd,dm));render();return;}
+  S.range=null;S.m+=dm;if(S.m<0){S.m=11;S.y--;}if(S.m>11){S.m=0;S.y++;}render();}
 $('prevM').onclick=()=>shiftMonth(-1);$('nextM').onclick=()=>shiftMonth(1);
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{S.tab=b.dataset.tab;try{sessionStorage.setItem('salaryTab',S.tab);}catch(e){}window.scrollTo(0,0);render();});
 
@@ -247,7 +255,9 @@ function renderCal(){
   const emps=activeEmps();
   if(S.emp!=='all'&&!emps.some(e=>e.id===S.emp))S.emp='all';
   if(!emps.length){$('view').innerHTML=`<div class="card empty">還沒有員工。<br><br><button class="primary" onclick="S.tab='emp';render();editEmp()">＋ 新增員工</button></div>`+helpCard();return;}
-  let h=`<div class="card"><div class="chips"><button class="chip ${S.emp==='all'?'on':''}" data-emp="all">全部</button>`;
+  let h=modeBar();
+  if(S.calMode==='job'){$('view').innerHTML=h;bindModeBar();renderJobs();return;}
+  h+=`<div class="card"><div class="chips"><button class="chip ${S.emp==='all'?'on':''}" data-emp="all">全部</button>`;
   emps.forEach(e=>h+=`<button class="chip ${S.emp===e.id?'on':''}" data-emp="${e.id}"><span class="dot" style="display:inline-block;background:${e.color};margin-right:4px;vertical-align:-1px"></span>${esc(e.name)}</button>`);
   h+='</div>';
   if(S.emp!=='all'){
@@ -270,6 +280,7 @@ function renderCal(){
       const rec=day[S.emp];
       if(rec&&num(rec.w))inner=`<div class="tag" style="background:${num(rec.w)===1?'#2563eb':'#0891b2'}">${wLabel(num(rec.w))} 工</div>`;
       if(rec&&num(rec.ot))inner+=`<div class="ot">+加${num(rec.ot)>1?'×'+num(rec.ot):''}</div>`;
+      const pj=rec&&projById(rec.p);if(pj)inner+=`<div class="pj" style="color:${pj.color}">${esc(pj.name.slice(0,3))}</div>`;
       if(rec&&(num(rec.add)||num(rec.sub)||rec.note))inner+=`<div class="cnt">•</div>`;
     }
     h+=`<div class="d ${wd===0?'sun':wd===6?'sat':''} ${key===tk?'today':''}" data-day="${d}"><div class="n">${d}</div>${inner}</div>`;
@@ -280,6 +291,7 @@ function renderCal(){
     h+=`<div class="card"><div class="kpi"><div><b>${r.days}</b><small>出勤天數</small></div><div><b>${fu(r.units)}</b><small>總工數</small></div><div><b>${fmt(r.total)}</b><small>本期薪資</small></div></div><div class="small" style="margin-top:6px;text-align:center">薪資期間 ${ymd(p.from)}～${ymd(p.to)}</div></div>`;
   }
   $('view').innerHTML=h;
+  bindModeBar();
   document.querySelectorAll('[data-emp]').forEach(b=>b.onclick=()=>{S.emp=b.dataset.emp;render();});
   document.querySelectorAll('[data-brush]').forEach(b=>b.onclick=()=>{S.brush=b.dataset.brush;render();});
   document.querySelectorAll('.cal .d[data-day]').forEach(c=>c.onclick=()=>tapDay(+c.dataset.day));
@@ -330,7 +342,8 @@ function dayEditor(d){
     <label>加班（每次 0.5 工）</label><div class="step"><button type="button" data-otd="-1">−</button><b data-otn>${num(r.ot)}</b><button type="button" data-otd="1">＋</button><span class="small" data-otu>次＝${fu(num(r.ot)*OT_UNIT)} 工</span></div>
     <div class="g"><div><label>加給／獎金（元）</label><input data-f="add" type="number" inputmode="numeric" value="${esc(r.add??'')}" placeholder="0"></div>
     <div><label>預支／扣款（元）</label><input data-f="sub" type="number" inputmode="numeric" value="${esc(r.sub??'')}" placeholder="0"></div></div>
-    <label>備註</label><input data-f="note" value="${esc(r.note??'')}" placeholder="例如：工地名稱"></div>`;
+    <label>工程</label><select data-f="p">${projOptions(r.p)}</select>
+    <label>備註</label><input data-f="note" value="${esc(r.note??'')}" placeholder="例如：做了什麼"></div>`;
   });
   h+=`<div class="row" style="margin-top:12px"><button class="secondary grow" onclick="closeSheet()">取消</button><button class="primary grow" id="dSave">儲存</button></div>`;
   openSheet(h);
@@ -352,6 +365,158 @@ function dayEditor(d){
   };
 }
 
+// ===== 工程安排 =====
+// DB.projects＝[{id,name,place,color,note,done}]；某人某天在哪個工程＝records[日期][員工id].p
+// 只安排工程、沒記工數的紀錄不算薪資（計薪只看 w／ot）
+const projById=id=>id?DB.projects.find(x=>x.id===id):null;
+const openProjs=()=>DB.projects.filter(x=>!x.done);
+const jobMode=()=>S.tab==='cal'&&S.calMode==='job';
+function setJd(k){S.jd=k;const t=k2d(k);S.y=t.getFullYear();S.m=t.getMonth();}
+function projOptions(cur){
+  return `<option value="">— 沒有指定 —</option>`+DB.projects.filter(x=>!x.done||x.id===cur).map(x=>`<option value="${x.id}" ${x.id===cur?'selected':''}>${esc(x.name)}${x.done?'（已完工）':''}</option>`).join('');
+}
+function modeBar(){
+  return `<div class="seg" style="margin-bottom:10px"><button type="button" data-cm="rec" class="${S.calMode==='rec'?'on':''}">📅 記工</button><button type="button" data-cm="job" class="${S.calMode==='job'?'on':''}">🏗️ 工程安排</button></div>`;
+}
+function bindModeBar(){
+  document.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{
+    S.calMode=b.dataset.cm;try{sessionStorage.setItem('salaryCalMode',S.calMode);}catch(e){}
+    if(S.calMode==='job'&&!S.jd)setJd(todayKey());
+    render();
+  });
+}
+function renderJobs(){
+  if(!S.jd)setJd(todayKey());
+  const k=S.jd,day=DB.records[k]||{},emps=activeEmps();
+  const shown=DB.projects.filter(x=>!x.done||emps.some(e=>day[e.id]&&day[e.id].p===x.id));
+  let h=`<div class="card"><div class="pbig" style="margin-top:0">${ymd(k)}（${wdOf(k)}）${k===todayKey()?'　<span class="small">今天</span>':k===addD(todayKey(),1)?'　<span class="small">明天</span>':''}</div>
+  <div class="row" style="margin-top:6px"><input type="date" id="jdPick" class="grow" value="${k}"><button class="secondary" id="jdToday">今天</button><button class="secondary" id="jdTom">明天</button></div>
+  <div class="small" style="margin-top:6px">上方 ‹ › 換前一天／後一天。安排工程只是派工，不會算薪資；要算薪資請在「📅 記工」記工數，或安排時勾「同時記 1 工」。</div></div>`;
+  if(!DB.projects.length)h+=`<div class="card empty">還沒有工程。<br><br><button class="primary" id="pjNew">＋ 新增工程</button></div>`;
+  shown.forEach(x=>{
+    const who=emps.filter(e=>day[e.id]&&day[e.id].p===x.id);
+    h+=`<div class="card" style="border-left:6px solid ${x.color}"><div class="emp-h"><b class="grow">${esc(x.name)}${x.done?' <span class="small">（已完工）</span>':''}</b><span class="small">${who.length} 人</span></div>
+    ${x.place?`<div class="small">📍 ${esc(x.place)}</div>`:''}
+    <div class="chips" style="flex-wrap:wrap;margin-top:8px">${who.map(e=>`<span class="chip" style="cursor:default"><span class="dot" style="display:inline-block;background:${e.color};margin-right:4px;vertical-align:-1px"></span>${esc(e.name)}${num(day[e.id].w)?`<span class="small">　${fu(num(day[e.id].w))}工</span>`:''}</span>`).join('')||'<span class="small">還沒有安排人員</span>'}</div>
+    <button class="secondary" style="width:100%;margin-top:8px" data-assign="${x.id}">👷 安排人員</button></div>`;
+  });
+  if(DB.projects.length){
+    const free=emps.filter(e=>!(day[e.id]&&projById(day[e.id].p)));
+    h+=`<div class="card"><b>還沒安排</b><div class="small" style="margin-top:4px">${free.map(e=>esc(e.name)).join('、')||'全部都安排好了 👍'}</div></div>
+    <div class="card"><div class="row"><button class="secondary grow" id="jdCopy">📋 照前一天安排</button><button class="line grow" id="jdLine">💬 LINE 傳派工單</button></div>
+    <button class="secondary" style="width:100%;margin-top:8px" id="pjMgr">🏗️ 管理工程（${openProjs().length} 個進行中）</button></div>`;
+  }
+  $('view').insertAdjacentHTML('beforeend',h);
+  $('jdPick').onchange=ev=>{if(ev.target.value){setJd(ev.target.value);render();}};
+  $('jdToday').onclick=()=>{setJd(todayKey());render();};
+  $('jdTom').onclick=()=>{setJd(addD(todayKey(),1));render();};
+  if($('pjNew'))$('pjNew').onclick=()=>editProject();
+  if($('pjMgr'))$('pjMgr').onclick=projectsSheet;
+  if($('jdCopy'))$('jdCopy').onclick=copyPrevDay;
+  if($('jdLine'))$('jdLine').onclick=()=>shareSheet('派工單',dispatchText(k),'按「用 LINE 傳送」後，在 LINE 選工作群組或員工的聊天室。');
+  document.querySelectorAll('[data-assign]').forEach(b=>b.onclick=()=>assignSheet(b.dataset.assign));
+}
+function assignSheet(pid){
+  const x=projById(pid),k=S.jd,day=DB.records[k]||{},emps=activeEmps();
+  openSheet(`<h2>👷 ${esc(x.name)}</h2><div class="small">${ymd(k)}（${wdOf(k)}）　點名字選擇要去這個工程的人。</div>
+  <div class="pick">${emps.map(e=>{const rc=day[e.id]||{},o=projById(rc.p);
+    return `<button type="button" data-pe="${e.id}" class="${rc.p===pid?'on':''}"><span class="dot" style="background:${e.color}"></span><span class="grow" style="text-align:left">${esc(e.name)}</span><span class="small">${o&&o.id!==pid?'目前在 '+esc(o.name):num(rc.w)?fu(num(rc.w))+' 工':''}</span></button>`;}).join('')}</div>
+  <label style="margin-top:10px"><input type="checkbox" id="asWork">同時記 1 工（還沒記工的人）</label>
+  <div class="row" style="margin-top:12px"><button class="secondary grow" onclick="closeSheet()">取消</button><button class="primary grow" id="asSave">儲存</button></div>`);
+  document.querySelectorAll('#sheet [data-pe]').forEach(b=>b.onclick=()=>b.classList.toggle('on'));
+  $('asSave').onclick=()=>{
+    const work=$('asWork').checked;let c=0;
+    document.querySelectorAll('#sheet [data-pe]').forEach(b=>{
+      const id=b.dataset.pe,cur=Object.assign({},(DB.records[k]||{})[id]||{});
+      if(b.classList.contains('on')){cur.p=pid;if(work&&!num(cur.w))cur.w=1;c++;}
+      else if(cur.p===pid)delete cur.p;
+      else return;
+      setRec(k,id,cur);
+    });
+    save();closeSheet();render();toast(`已安排 ${c} 人`);
+  };
+}
+function copyPrevDay(){
+  const k=S.jd,emps=activeEmps();
+  let src=null;
+  for(let i=1;i<=14&&!src;i++){const pk=addD(k,-i),d=DB.records[pk]||{};if(emps.some(e=>d[e.id]&&projById(d[e.id].p)))src=pk;}
+  if(!src){toast('前 14 天都沒有工程安排');return;}
+  let c=0;
+  emps.forEach(e=>{
+    const from=(DB.records[src]||{})[e.id],pj=from&&projById(from.p);if(!pj||pj.done)return;
+    const cur=Object.assign({},(DB.records[k]||{})[e.id]||{});if(projById(cur.p))return;
+    cur.p=pj.id;setRec(k,e.id,cur);c++;
+  });
+  save();render();toast(c?`照 ${md(src)} 安排了 ${c} 人`:`${md(src)} 的人今天都已經安排了`);
+}
+function dispatchText(k){
+  const day=DB.records[k]||{},emps=activeEmps(),L=[`【派工單】${ymd(k)}（${wdOf(k)}）`];
+  DB.projects.forEach(x=>{
+    const who=emps.filter(e=>day[e.id]&&day[e.id].p===x.id);if(!who.length)return;
+    L.push('',`■ ${x.name}${x.place?`（${x.place}）`:''}`,`　${who.map(e=>e.name).join('、')}`);
+    if(x.note)L.push(`　備註：${x.note}`);
+  });
+  const free=emps.filter(e=>!(day[e.id]&&projById(day[e.id].p)));
+  if(free.length)L.push('',`未安排：${free.map(e=>e.name).join('、')}`);
+  return L.join('\n');
+}
+function shareSheet(title,text,hint){
+  openSheet(`<h2>${esc(title)}</h2>
+  <textarea id="shText" style="min-height:240px;font-size:15px;line-height:1.5"></textarea>
+  <div class="small" style="margin:6px 0 10px">可以先修改內容。${esc(hint||'')}</div>
+  <div class="row"><button class="secondary" onclick="closeSheet()">關閉</button><button class="secondary grow" id="shCopy">📋 複製</button><a class="line grow" id="shLine" target="_blank" rel="noopener">💬 用 LINE 傳送</a></div>`);
+  const ta=$('shText'),a=$('shLine');ta.value=text;
+  const link=()=>{a.href='https://line.me/R/share?text='+encodeURIComponent(ta.value);};
+  link();ta.oninput=link;$('shCopy').onclick=()=>copyText(ta.value);
+}
+function projectsSheet(){
+  const list=DB.projects.slice().sort((a,b)=>(a.done?1:0)-(b.done?1:0));
+  openSheet(`<h2>🏗️ 管理工程</h2>
+  <button class="primary" style="width:100%;margin:6px 0" id="pjAdd">＋ 新增工程</button>
+  ${list.map(x=>`<div class="li" data-pj="${x.id}"><span class="dot" style="background:${x.color}"></span><div class="grow"><b>${esc(x.name)}</b>${x.done?' <span class="small">（已完工）</span>':''}<div class="small">${esc(x.place||'')}${x.note?'・'+esc(x.note):''}</div></div><span class="small">編輯 ›</span></div>`).join('')||'<div class="empty">還沒有工程</div>'}
+  <button class="secondary" style="width:100%;margin-top:10px" onclick="closeSheet()">關閉</button>`);
+  $('pjAdd').onclick=()=>editProject();
+  document.querySelectorAll('#sheet [data-pj]').forEach(li=>li.onclick=()=>editProject(li.dataset.pj));
+}
+function editProject(id){
+  const x=id?projById(id):{id:uid(),name:'',place:'',note:'',color:COLORS[(DB.projects.length+2)%COLORS.length],done:false};
+  openSheet(`<h2>${id?'編輯工程':'新增工程'}</h2>
+  <label for="pjName">工程名稱</label><input id="pjName" value="${esc(x.name)}" placeholder="例如：中山路透天厝">
+  <div class="row"><div class="grow"><label for="pjPlace">地點</label><input id="pjPlace" value="${esc(x.place||'')}" placeholder="例如：台中市中山路 100 號"></div>
+  <div style="width:80px"><label for="pjColor">顏色</label><input id="pjColor" type="color" value="${x.color}"></div></div>
+  <label for="pjNote">備註（會出現在派工單）</label><input id="pjNote" value="${esc(x.note||'')}" placeholder="例如：7:30 集合、帶梯子">
+  <label style="margin-top:12px"><input type="checkbox" id="pjDone" ${x.done?'checked':''}>已完工（不會再出現在安排清單，舊紀錄保留）</label>
+  <div class="row" style="margin-top:12px">${id?'<button class="danger" id="pjDel">刪除</button>':''}<button class="secondary grow" id="pjBack">返回</button><button class="primary grow" id="pjSave">儲存</button></div>`);
+  $('pjBack').onclick=projectsSheet;
+  $('pjSave').onclick=()=>{
+    const name=$('pjName').value.trim();if(!name){toast('請輸入工程名稱');return;}
+    Object.assign(x,{name,place:$('pjPlace').value.trim(),note:$('pjNote').value.trim(),color:$('pjColor').value,done:$('pjDone').checked});
+    if(!id)DB.projects.push(x);
+    save();render();projectsSheet();toast('已儲存');
+  };
+  if(id)$('pjDel').onclick=()=>ask(`刪除工程「${x.name}」？紀錄裡的工數會保留，只是不再標示這個工程。（工程做完了的話，勾「已完工」就好）`,{ok:'刪除',danger:true}).then(ok=>{
+    if(!ok)return;
+    DB.projects=DB.projects.filter(o=>o.id!==id);
+    Object.keys(DB.records).forEach(k=>Object.keys(DB.records[k]).forEach(e=>{if(DB.records[k][e].p===id){const c=Object.assign({},DB.records[k][e]);delete c.p;setRec(k,e,c);}}));
+    save();render();projectsSheet();toast('已刪除');
+  });
+}
+// 統計：期間內每個工程用了多少工、人工成本多少
+function jobCostCard(rs){
+  const m={};
+  rs.forEach(({e,r})=>r.list.forEach(({k,rec})=>{
+    const u=num(rec.w)+num(rec.ot)*OT_UNIT;if(!u)return;
+    const id=projById(rec.p)?rec.p:'';
+    const o=m[id]=m[id]||{n:0,u:0,c:0};o.n+=num(rec.w)?1:0;o.u+=u;o.c+=u*rateOn(e,k);
+  }));
+  const ids=Object.keys(m);
+  if(!DB.projects.length||!ids.length)return '';
+  ids.sort((a,b)=>(a===''?1:0)-(b===''?1:0)||m[b].c-m[a].c);
+  return `<div class="card"><b>🏗️ 工程人工</b><div class="small">這段期間每個工程用了多少工（不含加給、扣款）。</div>
+  <div style="overflow-x:auto"><table class="br"><tr><td class="small">工程</td><td class="small" style="text-align:right">人次</td><td class="small" style="text-align:right">工數</td><td class="small">人工成本</td></tr>
+  ${ids.map(id=>{const x=projById(id),o=m[id];return `<tr><td>${x?`<span class="dot" style="display:inline-block;background:${x.color};margin-right:4px"></span>${esc(x.name)}`:'<span class="small">沒有指定工程</span>'}</td><td style="text-align:right">${o.n}</td><td style="text-align:right">${fu(o.u)}</td><td>${fmt(Math.round(o.c))}</td></tr>`;}).join('')}</table></div></div>`;
+}
+
 function renderStat(){
   const p=curPeriod();
   const emps=DB.employees.filter(e=>e.active!==false||calc(e,p.from,p.to).list.length);
@@ -366,6 +531,7 @@ function renderStat(){
   const tot=rs.reduce((a,x)=>a+x.r.total,0),un=rs.reduce((a,x)=>a+x.r.units,0),ot=rs.reduce((a,x)=>a+x.r.ot,0);
   h+=`<div class="card"><div class="kpi"><div><b>${fmt(tot)}</b><small>薪資總支出</small></div><div><b>${fu(un)}</b><small>總工數</small></div><div><b>${fu(ot)}</b><small>加班工數</small></div></div>
   <div class="row" style="margin-top:10px"><button class="secondary grow" id="csv">📄 匯出 Excel（CSV）</button><button class="secondary grow" id="cp">📋 複製總表</button></div></div>`;
+  h+=jobCostCard(rs);
   rs.forEach(({e,r})=>{
     const sg=paySegs(r);
     h+=`<div class="card"><div class="emp-h"><span class="dot" style="background:${e.color}"></span><b class="grow">${esc(e.name)}</b><span class="money">$${fmt(r.total)}</span></div>
@@ -374,7 +540,7 @@ function renderStat(){
     <tr><td>加給／獎金</td><td>${fmt(r.add)}</td></tr><tr><td>預支／扣款</td><td>${r.sub?'−'+fmt(r.sub):0}</td></tr>
     <tr class="sum"><td>實發</td><td>${fmt(r.total)}</td></tr></table>
     <button class="line" style="width:100%;margin-top:8px" data-slip="${e.id}">💬 用 LINE 傳薪資單</button>
-    <details><summary>每日明細（${r.list.length} 筆）</summary><div class="daylist">${r.list.map(({k,rec})=>`<div><span>${md(k)} ${num(rec.w)?fu(num(rec.w))+' 工':''}${num(rec.ot)?` 加班${num(rec.ot)}次`:''}${rec.note?`（${esc(rec.note)}）`:''}</span><span>${num(rec.add)?'+'+fmt(num(rec.add)):''}${num(rec.sub)?' −'+fmt(num(rec.sub)):''}</span></div>`).join('')||'<div>這段期間沒有紀錄</div>'}</div></details></div>`;
+    <details><summary>每日明細（${r.list.length} 筆）</summary><div class="daylist">${r.list.map(({k,rec})=>`<div><span>${md(k)} ${num(rec.w)?fu(num(rec.w))+' 工':''}${num(rec.ot)?` 加班${num(rec.ot)}次`:''}${projById(rec.p)?` 〔${esc(projById(rec.p).name)}〕`:''}${rec.note?`（${esc(rec.note)}）`:''}</span><span>${num(rec.add)?'+'+fmt(num(rec.add)):''}${num(rec.sub)?' −'+fmt(num(rec.sub)):''}</span></div>`).join('')||'<div>這段期間沒有紀錄</div>'}</div></details></div>`;
   });
   $('view').innerHTML=h;
   bindPeriod();
@@ -408,6 +574,7 @@ function slipText(e,r,p,detail){
     L.push('','— 每日明細 —');
     r.list.forEach(({k,rec})=>{
       const a=[];if(num(rec.w))a.push(`${fu(num(rec.w))} 工`);if(num(rec.ot))a.push(`加班${num(rec.ot)}次`);
+      const pj=projById(rec.p);if(pj)a.push(pj.name);
       if(num(rec.add))a.push(`+${fmt(num(rec.add))}`);if(num(rec.sub))a.push(`−${fmt(num(rec.sub))}`);if(rec.note)a.push(rec.note);
       L.push(`${md(k)}（${'日一二三四五六'[k2d(k).getDay()]}）${a.join('　')}`);
     });
@@ -439,8 +606,8 @@ function exportCSV(rs,p){
   const q=v=>`"${String(v).replace(/"/g,'""')}"`;
   const rows=[[`薪資期間 ${ymd(p.from)}～${ymd(p.to)}`],['員工','日薪（分段）','出勤天數','正班工數','加班次數','加班工數','總工數','工資','加給','預支扣款','實發']];
   rs.forEach(({e,r})=>rows.push([e.name,paySegs(r).map(g=>`${md(g.from)}~${md(g.to)} ${fu(g.units)}工×${g.rate}`).join('；'),r.days,fu(r.work),r.otCount,fu(r.ot),fu(r.units),r.pay,r.add,r.sub,r.total]));
-  rows.push([],['日期','員工','日薪','正班工數','加班次數','加給','預支扣款','備註']);
-  rs.forEach(({e,r})=>r.list.forEach(({k,rec})=>rows.push([k,e.name,rateOn(e,k),num(rec.w)||'',num(rec.ot)||'',rec.add??'',rec.sub??'',rec.note??''])));
+  rows.push([],['日期','員工','工程','日薪','正班工數','加班次數','加給','預支扣款','備註']);
+  rs.forEach(({e,r})=>r.list.forEach(({k,rec})=>rows.push([k,e.name,projById(rec.p)?.name??'',rateOn(e,k),num(rec.w)||'',num(rec.ot)||'',rec.add??'',rec.sub??'',rec.note??''])));
   download(`薪資出勤_${p.from}_${p.to}.csv`,'﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n'),'text/csv;charset=utf-8');
 }
 
@@ -518,7 +685,8 @@ function renderSet(){
 function helpCard(){
   return `<div class="card help"><b>📖 使用說明</b><ol style="padding-left:20px;margin:6px 0 0;font-size:14px">
   <li>到「👥 員工」新增員工，填<b>起薪（日薪）</b>。之後加薪：編輯員工 →「📈 調薪紀錄」填生效日和新日薪，舊的工數照舊日薪算。</li>
-  <li>到「📅 班表」選一位員工，點「<b>1 工</b>」或「<b>0.5 工</b>」，再點日期就記好；再點一次同一個會取消。</li>
+  <li><b>工程安排</b>：「📅 班表」上面切到「🏗️ 工程安排」，先按「管理工程」新增工程（名稱、地點），再到每個工程按「👷 安排人員」。上方 ‹ › 或「今天／明天」換日期，「照前一天安排」一鍵帶入，「💬 LINE 傳派工單」傳到群組。只安排不算薪資，勾「同時記 1 工」才會記工。統計頁會列出每個工程用了多少工和人工成本。</li>
+  <li>到「📅 班表」的「📅 記工」選一位員工，點「<b>1 工</b>」或「<b>0.5 工</b>」，再點日期就記好；再點一次同一個會取消。</li>
   <li>有加班：點「<b>＋加班 0.5 工</b>」再點日期。一天加班不只一次，用「✏️ 詳細」調整次數。</li>
   <li>「平日空白日全記 1 工」可一次記好週一到週五。要填<b>加給、預支／扣款、備註</b>：選「✏️ 詳細」，或在「全部」點日期。</li>
   <li>「📊 統計」看每人<b>出勤天數、總工數與實發薪資</b>；期間內有調薪會分段列出。可匯出 Excel 或複製總表。</li>
