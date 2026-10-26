@@ -51,7 +51,8 @@ nav.tabs button.on::after{content:"";position:absolute;bottom:2px;width:44px;hei
 /* 記工／工程安排切換 */
 .seg{display:flex;gap:6px}.seg button{flex:1;background:var(--soft);color:var(--navy);white-space:nowrap}.seg button.on{background:var(--navy);color:white;font-weight:700;box-shadow:0 2px 8px rgba(30,58,138,.3)}
 .seg.modebar{background:white;padding:6px;border-radius:18px;box-shadow:var(--shadow);margin-bottom:12px}
-.seg.modebar button{min-height:50px;font-size:18px;border-radius:14px;background:transparent}
+.seg.modebar button{min-height:50px;font-size:18px;border-radius:14px;background:transparent;display:flex;align-items:center;justify-content:center;gap:8px}
+.seg.modebar button svg{width:24px;height:24px;flex:none}
 .seg.modebar button:not(.on){background:#f4f7fd}
 .seg.modebar button.on{background:linear-gradient(135deg,#1e3a8a,#1d4ed8)}
 .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
@@ -73,11 +74,11 @@ nav.tabs button.on::after{content:"";position:absolute;bottom:2px;width:44px;hei
 .dots{display:flex;flex-wrap:wrap;gap:3px;justify-content:center}
 .dots i{width:9px;height:9px;border-radius:50%;display:block}
 .cnt{font-size:11px;color:#475569;font-weight:600}
-/* 工程標籤（每天一顆圓角標籤） */
-.bands{align-self:stretch;margin:auto 0 0;display:flex;flex-direction:column;gap:2px;padding-top:3px}
-.band{height:25px;display:flex;align-items:center;justify-content:center;color:white;font-weight:700;border-radius:7px;text-align:center;padding:1px 2px;box-shadow:0 1px 2px rgba(0,0,0,.12)}
-.band span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all;font-size:10px;line-height:11.5px;letter-spacing:-.3px}
-.band[style*="background:none"]{box-shadow:none}
+/* 工程色帶（施工日連成一條，沒施工的日子斷開） */
+.bands{align-self:stretch;margin:auto -5.5px 0;display:flex;flex-direction:column;gap:3px;padding-top:3px}
+.band{height:16px;font-size:10.5px;line-height:16px;color:white;white-space:nowrap;overflow:visible;font-weight:700}
+.band.s{margin-left:5.5px;border-radius:8px 0 0 8px}.band.e{margin-right:5.5px;border-radius:0 8px 8px 0}.band.s.e{border-radius:8px;text-align:center}
+.band span{position:relative;z-index:1;display:inline-block;vertical-align:top;padding-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.25)}
 .cal.mini .d{min-height:40px;cursor:pointer}.cal.mini .d.on .n{color:white}
 .pj{font-size:10px;font-weight:700;max-width:100%;overflow:hidden;white-space:nowrap}
 .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
@@ -137,10 +138,11 @@ details summary{cursor:pointer;color:var(--blue);font-size:13px;margin-top:8px;f
 <div class="mask" id="askMask" style="z-index:70"></div>
 <div class="ask" id="ask"></div>
 <script>
-const APP_VER='v10（2026-10-26）';
+const APP_VER='v11（2026-10-26）';
 const KEY='salaryBoss.v1';
 const OT_UNIT=0.5; // 加班一次＝0.5 工
 const COLORS=['#2563eb','#7c3aed','#db2777','#0891b2','#ea580c','#65a30d','#0f766e','#9333ea'];
+const PROJ_COLORS=['#db2777','#0e7490','#2563eb','#7c3aed','#ea580c','#059669','#ca8a04','#475569'];
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{const n=parseFloat(v);return isFinite(n)?n:0;};
@@ -442,21 +444,25 @@ function bandsHtml(lanes,k,rowStart){
   for(let i=0;i<n;i++){
     const o=on.find(z=>z.lane===i);
     if(!o||!isWorkDay(o.x,k)){h+='<div class="band" style="background:none"></div>';continue;}
-    h+=`<div class="band" title="${esc(o.x.name)}" style="background:${o.x.color}${o.x.done?';opacity:.45':''}"><span>${esc(o.x.name)}</span></div>`;
+    const s=!isWorkDay(o.x,addD(k,-1)),e=!isWorkDay(o.x,addD(k,1));
+    // 名稱只能寫在色帶上：算這段色帶在這一週連續幾天，太長就用「…」
+    let run=1;if(s||rowStart){for(let t=addD(k,1);run<7&&k2d(t).getDay()!==0&&t<=o.en&&isWorkDay(o.x,t);t=addD(t,1))run++;}
+    h+=`<div class="band${s?' s':''}${e?' e':''}" style="background:${o.x.color}${o.x.done?';opacity:.45':''}">${s||rowStart?`<span style="${run===1?'max-width:100%;padding-left:1px;text-overflow:clip;letter-spacing:-.6px;font-size:10px':`max-width:calc(${run*100}% + ${(run-1)*5}px - 6px)`}">${esc(run===1?[...o.x.name].slice(0,3).join(''):o.x.name)}</span>`:''}</div>`;
   }
   const more=on.filter(o=>o.lane>=MAX_LANES&&isWorkDay(o.x,k)).length;
   return h+(more?`<div class="cnt" style="text-align:center">+${more}</div>`:'')+'</div>';
 }
 function monthProjCard(lanes){
   if(!lanes.length)return '';
-  return `<div class="card"><b>🏗️ 本月工程</b><div class="small">月曆上的工程標籤＝施工日。點工程可以修改。</div>
+  return `<div class="card"><b>🏗️ 本月工程</b><div class="small">月曆上的色帶＝施工日，沒施工的日子會斷開。點工程可以修改。</div>
   ${lanes.map(o=>`<div class="li" data-mpj="${o.x.id}"><span class="dot" style="background:${o.x.color}"></span><div class="grow"><b>${esc(o.x.name)}</b>${o.x.done?' <span class="small">（已完工）</span>':''}<div class="small">📆 ${rangeText(o.x)}${o.x.place?'・'+esc(o.x.place):''}</div></div><span class="small">編輯 ›</span></div>`).join('')}</div>`;
 }
 function projOptions(cur){
   return `<option value="">— 沒有指定 —</option>`+DB.projects.filter(x=>!x.done||x.id===cur).map(x=>`<option value="${x.id}" ${x.id===cur?'selected':''}>${esc(x.name)}${x.done?'（已完工）':''}</option>`).join('');
 }
 function modeBar(){
-  return `<div class="seg modebar"><button type="button" data-cm="rec" class="${S.calMode==='rec'?'on':''}">📅 記工</button><button type="button" data-cm="job" class="${S.calMode==='job'?'on':''}">🏗️ 工程安排</button></div>`;
+  const I='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+  return `<div class="seg modebar"><button type="button" data-cm="rec" class="${S.calMode==='rec'?'on':''}">${I}<rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M8.5 15l2.4 2.4 4.6-4.6"/></svg>記工</button><button type="button" data-cm="job" class="${S.calMode==='job'?'on':''}">${I}<path d="M6 21V7M9.5 21V7M6 10.5l3.5 3.5M9.5 10.5L6 14M6 17.5l3.5-3.5"/><path d="M2.5 7h19M7.75 7V3M7.75 3L2.5 7M7.75 3l13.75 4"/><path d="M18 7v5"/><path d="M16.5 12h3v1.2a1.5 1.5 0 0 1-3 0z"/><path d="M3.5 21h8.5"/></svg>工程安排</button></div>`;
 }
 function bindModeBar(){
   document.querySelectorAll('[data-cm]').forEach(b=>b.onclick=()=>{
@@ -563,7 +569,7 @@ function projectsSheet(){
   document.querySelectorAll('#sheet [data-pj]').forEach(li=>li.onclick=()=>editProject(li.dataset.pj));
 }
 function editProject(id,fromCal){
-  const x=id?projById(id):{id:uid(),name:'',place:'',note:'',color:COLORS[(DB.projects.length+2)%COLORS.length],done:false};
+  const x=id?projById(id):{id:uid(),name:'',place:'',note:'',color:PROJ_COLORS[DB.projects.length%PROJ_COLORS.length],done:false};
   openSheet(`<h2>${id?'編輯工程':'新增工程'}</h2>
   <label for="pjName">工程名稱</label><input id="pjName" value="${esc(x.name)}" placeholder="例如：中山路透天厝">
   <div class="row"><div class="grow"><label for="pjPlace">地點</label><input id="pjPlace" value="${esc(x.place||'')}" placeholder="例如：台中市中山路 100 號"></div>
@@ -809,7 +815,7 @@ function renderSet(){
 function helpCard(){
   return `<div class="card help"><b>📖 使用說明</b><ol style="padding-left:20px;margin:6px 0 0;font-size:14px">
   <li>到「👥 員工」新增員工，填<b>起薪（日薪）</b>。之後加薪：編輯員工 →「📈 調薪紀錄」填生效日和新日薪，舊的工數照舊日薪算。</li>
-  <li><b>工程安排</b>：「📅 班表」上面切到「🏗️ 工程安排」，先按「管理工程」新增工程（名稱、地點），再到每個工程按「👷 安排人員」。上方 ‹ › 或「今天／明天」換日期，「照前一天安排」一鍵帶入，「💬 LINE 傳派工單」傳到群組。新增工程時設定<b>施工日期</b>：每天都做選「連續施工」填起訖日；隔一天或隔好幾天才去做，選「<b>指定施工日</b>」在小月曆點選日期。「📅 記工」月曆每個施工日會出現<b>工程標籤</b>，工程安排只列出當天要施工的工程；臨時要去，按「📌 這天也要施工」。只安排不算薪資，勾「同時記 1 工」才會記工。統計頁會列出每個工程用了多少工和人工成本。</li>
+  <li><b>工程安排</b>：「📅 班表」上面切到「🏗️ 工程安排」，先按「管理工程」新增工程（名稱、地點），再到每個工程按「👷 安排人員」。上方 ‹ › 或「今天／明天」換日期，「照前一天安排」一鍵帶入，「💬 LINE 傳派工單」傳到群組。新增工程時設定<b>施工日期</b>：每天都做選「連續施工」填起訖日；隔一天或隔好幾天才去做，選「<b>指定施工日</b>」在小月曆點選日期。「📅 記工」月曆會用<b>色帶</b>標出施工日（沒施工的日子會斷開），工程安排只列出當天要施工的工程；臨時要去，按「📌 這天也要施工」。只安排不算薪資，勾「同時記 1 工」才會記工。統計頁會列出每個工程用了多少工和人工成本。</li>
   <li>到「📅 班表」的「📅 記工」選一位員工，點「<b>1 工</b>」或「<b>0.5 工</b>」，再點日期就記好；再點一次同一個會取消。</li>
   <li>有加班：點「<b>＋加班 0.5 工</b>」再點日期。一天加班不只一次，用「✏️ 詳細」調整次數。</li>
   <li>「平日空白日全記 1 工」可一次記好週一到週五。要填<b>加給、預支／扣款、備註</b>：選「✏️ 詳細」，或在「全部」點日期。</li>

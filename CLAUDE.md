@@ -4,7 +4,7 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 
 ## 檔案
 - `index.html`：整個 App（HTML＋CSS＋JS 都在這個檔）。
-- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v11`）。
+- `sw.js`：Service Worker，`CACHE` 名稱要跟著版本號更新（例如 `salary-v12`）。
 - `manifest.json`、`icon-*.png`：加入主畫面用。
 - `.nojekyll`：讓 GitHub Pages 直接發布檔案（不要刪）。
 
@@ -23,14 +23,15 @@ iPhone 用的網頁 App。純靜態網站，沒有建置步驟，部署在 GitHu
 - 薪資單：`slipText()` 產生文字，`slipSheet()` 可修改後用 `https://line.me/R/share?text=` 開 LINE 選聊天室傳送。
 - 畫面：`renderCal()` 班表（按鈕快速記工 `tapDay()`、`dayEditor()` 每日詳細）、`renderStat()` 統計與 CSV 匯出、`renderEmp()`／`editEmp()` 員工與調薪、`renderSet()` 設定（結算日、備份）。
 - 工程安排：`DB.projects＝[{id,name,place,color,note,done,from,to,days}]`（連續施工：from～to，to 空白＝未定；指定施工日：`days` 日期陣列，from／to 自動取頭尾），某人某天在哪個工程存在 `records[日期][員工id].p`。班表上方切「📅 記工／🏗️ 工程安排」（`S.calMode`）；`renderJobs()` 按日期派工（`S.jd`，標題 ‹ › 換天）、`assignSheet()` 選人、`copyPrevDay()` 照前一天、`dispatchText()` 派工單用 LINE 傳。只安排不算薪資（`calc()` 只看 w／ot）；統計頁 `jobCostCard()` 列各工程的人次、工數、人工成本。
-- 工程標籤：`monthLanes()` 幫當月有施工日的工程分車道（整個月車道數固定，標籤才會對齊），`bandsHtml()` 在每個施工日的日曆格底部畫一顆圓角標籤、寫工程名稱（最多兩行、`MAX_LANES` 條），`monthProjCard()` 是月曆下方的「本月工程」。工程安排只列當天在期間內的工程（`projActive()`）。
-- 施工日（使用者說的「跨日」＝隔一天或隔好幾天才去做，不是做到半夜）：`isWorkDay()` 判斷某天是不是施工日；標籤只出現在施工日；`daysText()` 把日期壓成「10/5、10/7、10/12～10/14」；工程編輯有小月曆點選施工日；工程安排畫面可按「📌 這天也要施工」（`addWorkDay()`，連續施工的工程會轉成指定施工日）。
+- 工程色帶：`monthLanes()` 幫當月有施工日的工程分車道（整個月車道數固定，色帶才會對齊），`bandsHtml()` 畫在日曆格底部，連續施工日連成一條、沒施工的日子斷開（使用者要這種，不要每天一顆標籤）；名稱寫在每段開頭與每週日，太長用「…」，只有一天的寫前三個字（最多 `MAX_LANES` 條），`monthProjCard()` 是月曆下方的「本月工程」。工程安排只列當天在期間內的工程（`projActive()`）。
+- 施工日（使用者說的「跨日」＝隔一天或隔好幾天才去做，不是做到半夜）：`isWorkDay()` 判斷某天是不是施工日；色帶只畫在施工日、中間沒施工的日子斷開；`daysText()` 把日期壓成「10/5、10/7、10/12～10/14」；工程編輯有小月曆點選施工日；工程安排畫面可按「📌 這天也要施工」（`addWorkDay()`，連續施工的工程會轉成指定施工日）。
 - 確認視窗一律用 App 內的 `ask()`，不要用 `confirm`／`alert`／`prompt`。
 
 ## 介面風格（v10，使用者給的參考圖）
 - 深藍漸層標題列、淺藍灰底（`--bg`）、白色圓角卡片＋淡陰影；主色 `--navy`／`--blue`，顏色都用 `:root` 的 CSS 變數。
 - 記工／工程安排是大顆分段按鈕（`.seg.modebar`），員工是膠囊按鈕（`.chip`），選中＝深藍。
-- 月曆格白底細框圓角，今天＝橘框＋米色底；下方分頁列用線條 SVG 圖示，選中＝藍色＋底線。
+- 月曆格白底細框圓角，今天＝橘框＋米色底；記工／工程安排與下方分頁列都用線條 SVG 圖示（不用 emoji），選中＝藍色＋底線。
+- 工程預設顏色用參考圖色系 `PROJ_COLORS`（桃紅、藍綠、藍、紫…）。
 
 ## 使用者偏好
 - 介面與說明一律繁體中文。
